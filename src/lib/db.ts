@@ -4,6 +4,8 @@ import Database from "better-sqlite3";
 import { and, asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { isLecture } from "./activity-kind.ts";
+import { computeSlices, isDisallowedClash } from "./overlap.ts";
 import { activities, type Course, courses, picks, type Session, sessions } from "./schema.ts";
 import { generateSeed } from "./seed.ts";
 
@@ -160,24 +162,67 @@ export type AddOrSwapResult = { ok: true } | { ok: false; clashWithSessionId: nu
 // itself — and nothing is written until we know it's clash-free. This is
 // the fix for the earlier bug, where deleting the old pick first could
 // leave an owner with neither pick if the new one then turned out to clash.
+//
+// The lecture-permissive overlap rule (src/lib/overlap.ts): a time overlap
+// is only a *disallowed* clash when both sides are non-lecture — lectures
+// aren't attendance- or mark-checked at ANU, so overlapping a lecture with
+// anything (another lecture, a tutorial) is allowed and renders as a
+// side-by-side split instead of being rejected.
 export function addOrSwapPick(ownerId: string, sessionId: number): AddOrSwapResult {
-  const session = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
-  if (!session) throw new Error(`no such session ${sessionId}`);
+  const candidate = db
+    .select({
+      id: sessions.id,
+      activityId: sessions.activityId,
+      day: sessions.day,
+      startMinutes: sessions.startMinutes,
+      endMinutes: sessions.endMinutes,
+      activityCode: activities.code,
+    })
+    .from(sessions)
+    .innerJoin(activities, eq(sessions.activityId, activities.id))
+    .where(eq(sessions.id, sessionId))
+    .get();
+  if (!candidate) throw new Error(`no such session ${sessionId}`);
+  const candidateIsLecture = isLecture(candidate.activityCode);
 
   const existingPicks = listPicksForOwner(ownerId);
-  const oldPick = existingPicks.find((p) => p.activityId === session.activityId);
+  const oldPick = existingPicks.find((p) => p.activityId === candidate.activityId);
 
   const clash = existingPicks.find((p) => {
     if (oldPick && p.pickId === oldPick.pickId) return false;
-    return p.day === session.day && session.startMinutes < p.endMinutes && p.startMinutes < session.endMinutes;
+    const overlaps = p.day === candidate.day && candidate.startMinutes < p.endMinutes && p.startMinutes < candidate.endMinutes;
+    if (!overlaps) return false;
+    return isDisallowedClash({ isLecture: candidateIsLecture }, { isLecture: isLecture(p.activityCode) });
   });
   if (clash) return { ok: false, clashWithSessionId: clash.sessionId };
 
   db.transaction((tx) => {
     if (oldPick) tx.delete(picks).where(eq(picks.id, oldPick.pickId)).run();
-    tx.insert(picks).values({ ownerId, sessionId, activityId: session.activityId }).run();
+    tx.insert(picks).values({ ownerId, sessionId, activityId: candidate.activityId }).run();
   });
   return { ok: true };
+}
+
+export interface PickWithSlice extends PickWithDetails {
+  sliceIndex: number;
+  sliceCount: number;
+}
+
+// listPicksForOwner plus the shared slice layout (src/lib/overlap.ts) —
+// the one place the server computes "which picks are split, and how", so
+// index.astro and the API routes never call computeSlices directly.
+export function listPicksForOwnerWithSlices(ownerId: string): PickWithSlice[] {
+  const picksForOwner = listPicksForOwner(ownerId);
+  const sliced = computeSlices(
+    picksForOwner.map((p) => ({
+      id: p.activityId,
+      day: p.day,
+      startMinutes: p.startMinutes,
+      endMinutes: p.endMinutes,
+      isLecture: isLecture(p.activityCode),
+    })),
+  );
+  return picksForOwner.map((pick, i) => ({ ...pick, sliceIndex: sliced[i].sliceIndex, sliceCount: sliced[i].sliceCount }));
 }
 
 export function removePick(ownerId: string, activityId: number): void {

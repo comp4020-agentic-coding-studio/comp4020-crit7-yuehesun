@@ -160,6 +160,8 @@ describe("timetable: add/swap/remove over HTTP", () => {
   });
 
   it("rejects a genuinely overlapping add when there is no old pick to replace", async () => {
+    // Both sides are non-lecture (TutA/TutA) — still a genuine, disallowed
+    // clash under the lecture-permissive overlap rule.
     const jar = makeJar();
     const first = findSession("SLOP3092", "TutA", false, 0); // forced-clash side b
     const second = findSession("SLOP2805", "TutA", false, 0); // forced-clash side a
@@ -169,6 +171,29 @@ describe("timetable: add/swap/remove over HTTP", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toContain("clash=");
     expect(isPicked(await pageHtml(jar, "SLOP2805"), second)).toBe(false);
+  });
+
+  it("allows a lecture and a non-lecture activity to overlap (lecture-permissive rule)", async () => {
+    // ANU lectures aren't attendance- or mark-checked, so overlapping a
+    // lecture with anything is allowed — only non-lecture vs non-lecture is
+    // a genuine clash (src/lib/overlap.ts's isDisallowedClash). seed.ts's
+    // FORCED_OVERLAPS plants this pair deliberately so it's not left to
+    // whatever the PRNG happens to generate.
+    const jar = makeJar();
+    const lecture = findSession("SLOP4225", "LecA", false, 0); // forced-overlap side a
+    const tutorial = findSession("SLOP4225", "TutA", false, 1); // forced-overlap side b
+
+    const lectureRes = await addPick(jar, lecture, "SLOP4225");
+    expect(lectureRes.status).toBe(303);
+    expect(lectureRes.headers.get("location")).not.toContain("clash=");
+
+    const tutorialRes = await addPick(jar, tutorial, "SLOP4225");
+    expect(tutorialRes.status).toBe(303);
+    expect(tutorialRes.headers.get("location")).not.toContain("clash=");
+
+    const html = await pageHtml(jar, "SLOP4225");
+    expect(isPicked(html, lecture)).toBe(true);
+    expect(isPicked(html, tutorial)).toBe(true);
   });
 
   it("adds a non-overlapping session from a different course alongside an existing pick", async () => {
