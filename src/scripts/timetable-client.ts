@@ -197,6 +197,24 @@ function applySuccess(data: {
   const panel = document.querySelector(`.session-panel .activity[data-activity-id="${data.activityId}"]`);
   const panelReplacement = data.panelHtml ? firstElement(data.panelHtml) : null;
   if (panel && panelReplacement) panel.replaceWith(panelReplacement);
+
+  updateNavStatus(data.activityId, data.gridPicks.some((gp) => gp.activityId === data.activityId));
+}
+
+// The course-list checklist (plan.md §4): a fixed-size ✓/✗ per activity.
+// "Picked" is read off the same gridPicks the grid itself was just rebuilt
+// from, so this can't disagree with what the grid shows.
+function updateNavStatus(activityId: number, picked: boolean) {
+  const item = document.querySelector<HTMLElement>(`.course-nav-activity[data-activity-id="${activityId}"]`);
+  if (!item) return;
+  const icon = item.querySelector(".status-icon");
+  const label = item.querySelector(".sr-only");
+  if (icon) {
+    icon.classList.toggle("status-icon--done", picked);
+    icon.classList.toggle("status-icon--todo", !picked);
+    icon.textContent = picked ? "✓" : "✗";
+  }
+  if (label) label.textContent = picked ? "picked" : "not yet picked";
 }
 
 let clashRestoreEl: HTMLElement | null = null;

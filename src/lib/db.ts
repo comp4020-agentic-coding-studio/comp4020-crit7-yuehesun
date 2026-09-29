@@ -87,9 +87,12 @@ export interface ActivityWithSessions {
   sessions: Session[];
 }
 
+function listActivityRows(courseId: number) {
+  return db.select().from(activities).where(eq(activities.courseId, courseId)).orderBy(asc(activities.code)).all();
+}
+
 export function listActivitiesWithSessions(courseId: number): ActivityWithSessions[] {
-  const rows = db.select().from(activities).where(eq(activities.courseId, courseId)).orderBy(asc(activities.code)).all();
-  return rows.map((activity) => ({
+  return listActivityRows(courseId).map((activity) => ({
     id: activity.id,
     code: activity.code,
     sessions: db
@@ -99,6 +102,18 @@ export function listActivitiesWithSessions(courseId: number): ActivityWithSessio
       .orderBy(asc(sessions.day), asc(sessions.startMinutes))
       .all(),
   }));
+}
+
+export interface ActivityCode {
+  id: number;
+  code: string;
+}
+
+// Lean version of listActivitiesWithSessions for the course-list nav (plan.md
+// §4): it only needs each course's activity codes and pick status, not every
+// alternative session, so it skips the per-activity sessions query.
+export function listActivityCodes(courseId: number): ActivityCode[] {
+  return listActivityRows(courseId).map((activity) => ({ id: activity.id, code: activity.code }));
 }
 
 export interface PickWithDetails {

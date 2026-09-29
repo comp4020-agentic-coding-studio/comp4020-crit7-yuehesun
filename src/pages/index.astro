@@ -1,6 +1,13 @@
 ---
 import "../styles.css";
-import { getSessionInfo, gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwnerWithSlices } from "../lib/db";
+import {
+  getSessionInfo,
+  gridHourRange,
+  listActivitiesWithSessions,
+  listActivityCodes,
+  listCourses,
+  listPicksForOwnerWithSlices,
+} from "../lib/db";
 import { renderActivityPanel, renderClashDialogInner, renderGridPick } from "../lib/fragments";
 import { DAY_LABELS } from "../lib/format";
 
@@ -19,6 +26,11 @@ const activities = selectedCourse ? listActivitiesWithSessions(selectedCourse.id
 
 const picks = listPicksForOwnerWithSlices(ownerId);
 const pickedSessionByActivity = new Map(picks.map((p) => [p.activityId, p.sessionId]));
+
+// Every course's own activities, for the nav checklist below — spans all
+// picks, not just the selected course's, since pickedSessionByActivity is
+// keyed by activityId across the owner's whole timetable.
+const activitiesByCourse = new Map(courses.map((c) => [c.id, listActivityCodes(c.id)]));
 
 // The no-JS path for a rejected Add/swap (plan.md §6 step 6): /api/picks
 // redirects back here with the two colliding session ids as query params.
@@ -60,9 +72,25 @@ const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
                     aria-current={course.id === selectedCourse?.id ? "page" : undefined}
                   >
                     <span class="swatch" style={`background: ${course.color}`} aria-hidden="true" />
-                    <span class="course-code">{course.code}</span>
-                    <span class="course-title">{course.title}</span>
+                    <span class="course-name">
+                      <span class="course-code">{course.code}</span>
+                      <span class="course-title">{course.title}</span>
+                    </span>
                   </a>
+                  <ul class="course-activities">
+                    {(activitiesByCourse.get(course.id) ?? []).map((activity) => {
+                      const picked = pickedSessionByActivity.has(activity.id);
+                      return (
+                        <li class="course-nav-activity" data-activity-id={activity.id}>
+                          <span class="activity-code">{activity.code}</span>
+                          <span class={`status-icon ${picked ? "status-icon--done" : "status-icon--todo"}`} aria-hidden="true">
+                            {picked ? "✓" : "✗"}
+                          </span>
+                          <span class="sr-only">{picked ? "picked" : "not yet picked"}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </li>
               ))
             }
@@ -70,7 +98,7 @@ const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
         </section>
 
         <section class="grid-wrap" aria-labelledby="grid-heading">
-          <h2 id="grid-heading">Your timetable</h2>
+          <h2 id="grid-heading" class="sr-only">Your timetable</h2>
           <div class="grid-scroll">
             <div class="grid" id="grid" style={`grid-template-rows: ${gridTemplateRows}`}>
               {
