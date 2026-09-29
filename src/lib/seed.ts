@@ -43,6 +43,11 @@ export interface GeneratedSeed {
   sessions: GeneratedSession[];
   baselineSessions: GeneratedSession[];
   forcedClashPairs: [GeneratedSession, GeneratedSession][];
+  // A deliberate, guaranteed lecture-involving overlap — the allowed-overlap
+  // counterpart to forcedClashPairs, so "lecture overlaps are allowed" is
+  // demoable and testable over HTTP rather than left to whatever the PRNG
+  // happens to land on.
+  forcedOverlapPairs: [GeneratedSession, GeneratedSession][];
 }
 
 interface ActivityPlan {
@@ -91,7 +96,11 @@ const COURSE_PLANS: CoursePlan[] = [
     title: "Budgeted Language Model Training",
     color: "#FDE68A",
     activities: [
-      { code: "LecA", durationMinutes: 90, totalSessions: 1 },
+      // 2, not 1: needs a non-baseline alternative to plant FORCED_OVERLAPS'
+      // guaranteed lecture-involving overlap below (a lecture with only its
+      // clash-free baseline session could never demonstrate the allowed-
+      // overlap rule over HTTP).
+      { code: "LecA", durationMinutes: 90, totalSessions: 2 },
       { code: "TutA", durationMinutes: 60, totalSessions: 6 },
     ],
   },
@@ -145,6 +154,12 @@ interface ForcedClash {
 // guaranteed demoable rather than left to chance. Each side must land among
 // its activity's non-baseline sessions (totalSessions - 1 >= 1), which both
 // sides here satisfy.
+//
+// Both pairs are non-lecture vs non-lecture (TutA/TutA/ComA), which
+// spec/seed.test.ts asserts directly: under the lecture-permissive overlap
+// rule (src/lib/overlap.ts's isDisallowedClash), only a non-lecture/
+// non-lecture overlap is a genuine clash, so a forced *clash* fixture would
+// silently stop being one if either side were ever changed to a lecture.
 const FORCED_CLASHES: ForcedClash[] = [
   {
     a: { courseCode: "SLOP4225", activityCode: "TutA" },
@@ -157,6 +172,20 @@ const FORCED_CLASHES: ForcedClash[] = [
     b: { courseCode: "SLOP3092", activityCode: "TutA" },
     day: 3,
     startMinutes: 13 * 60,
+  },
+];
+
+// The allowed-overlap counterpart: a lecture deliberately overlapping its
+// own course's tutorial, so the rule that lecture overlaps are allowed
+// (not just "not forced to clash") is demoable and testable over HTTP, the
+// same way FORCED_CLASHES makes the disallowed case demoable. At least one
+// side of every pair here must be a lecture.
+const FORCED_OVERLAPS: ForcedClash[] = [
+  {
+    a: { courseCode: "SLOP4225", activityCode: "LecA" },
+    b: { courseCode: "SLOP4225", activityCode: "TutA" },
+    day: 0,
+    startMinutes: 9 * 60,
   },
 ];
 
@@ -223,15 +252,16 @@ export function generateSeed(): GeneratedSeed {
   const rng = mulberry32(PRNG_SEED);
   const occupied: boolean[][] = Array.from({ length: DAYS }, () => Array<boolean>(SLOTS_PER_DAY).fill(false));
 
-  // Which forced-clash slots belong to which activity, in FORCED_CLASHES
-  // order — each activity gets at most one across the whole plan, so it
-  // always lands as that activity's first non-baseline session.
+  // Which forced slots (clashes, then allowed overlaps) belong to which
+  // activity, in that order — an activity referenced by both would take its
+  // clash slot as its first non-baseline session and its overlap slot as
+  // its second, though today no activity appears in both lists.
   const forcedSlotsByActivity = new Map<string, { day: number; startMinutes: number }[]>();
-  for (const clash of FORCED_CLASHES) {
-    for (const side of [clash.a, clash.b]) {
+  for (const forced of [...FORCED_CLASHES, ...FORCED_OVERLAPS]) {
+    for (const side of [forced.a, forced.b]) {
       const key = activityKey(side);
       const slots = forcedSlotsByActivity.get(key) ?? [];
-      slots.push({ day: clash.day, startMinutes: clash.startMinutes });
+      slots.push({ day: forced.day, startMinutes: forced.startMinutes });
       forcedSlotsByActivity.set(key, slots);
     }
   }
@@ -285,16 +315,21 @@ export function generateSeed(): GeneratedSeed {
     }
   }
 
-  const forcedClashPairs: [GeneratedSession, GeneratedSession][] = FORCED_CLASHES.map((clash) => {
-    const a = forcedSessionsByKeyAndSlot.get(`${activityKey(clash.a)}|${clash.day}|${clash.startMinutes}`);
-    const b = forcedSessionsByKeyAndSlot.get(`${activityKey(clash.b)}|${clash.day}|${clash.startMinutes}`);
-    if (!a || !b) {
-      throw new Error(
-        `seed generator: forced clash between ${activityKey(clash.a)} and ${activityKey(clash.b)} wasn't planted — check totalSessions leaves room for it`,
-      );
-    }
-    return [a, b];
-  });
+  function resolvePairs(forced: ForcedClash[]): [GeneratedSession, GeneratedSession][] {
+    return forced.map((entry) => {
+      const a = forcedSessionsByKeyAndSlot.get(`${activityKey(entry.a)}|${entry.day}|${entry.startMinutes}`);
+      const b = forcedSessionsByKeyAndSlot.get(`${activityKey(entry.b)}|${entry.day}|${entry.startMinutes}`);
+      if (!a || !b) {
+        throw new Error(
+          `seed generator: forced pair between ${activityKey(entry.a)} and ${activityKey(entry.b)} wasn't planted — check totalSessions leaves room for it`,
+        );
+      }
+      return [a, b];
+    });
+  }
 
-  return { courses, activities, sessions, baselineSessions, forcedClashPairs };
+  const forcedClashPairs = resolvePairs(FORCED_CLASHES);
+  const forcedOverlapPairs = resolvePairs(FORCED_OVERLAPS);
+
+  return { courses, activities, sessions, baselineSessions, forcedClashPairs, forcedOverlapPairs };
 }
