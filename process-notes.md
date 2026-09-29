@@ -4,17 +4,29 @@ Candidate moments, kept as they happen. This is scratch, not the submission —
 `PROCESS.md` stays empty until all the coding is done, then we pick the most
 important moment(s) from here together. Not checked by `pnpm check:evidence`.
 
-A moment is a real fork where a mistake or risk was turned into something
-that stays in the repo: a rule in `CLAUDE.md`, a check or test in `spec/`, or
-an attempt thrown away and committed as a deletion. Not logged here: chat-only
-corrections, renames, tool workarounds, progress notes — and not logged until
-that rule/check/deletion is actually committed (a real fix with no test or
-rule backing it yet isn't a moment; it's just a fix).
+A moment is a real fork: a point where the obvious thing to do carried a
+mistake or a risk, and we did something else instead for a reason. What makes
+it worth logging is the judgment call, not whether the artifact happens to be
+a rule, a check, or a deletion — a decision can be logged here before its
+enforcing test lands, as long as we say what's missing and when it's coming.
+Not logged here: chat-only corrections, renames, tool workarounds, progress
+notes, or mechanical cleanup with no real alternative considered.
 
 Each entry: what happened, the obvious alternative, what we did instead, why
-it helped (evidence), and the real commit hash.
+it helped (evidence, or what's still missing), and the commit hash — real,
+from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
 
 ## Moments
+
+- **Decided the data-sourcing policy.** Obvious alternative: use real ANU
+  course/timetable data, since it's the most direct source. Instead: no real
+  ANU data or personal information anywhere in the seed data, since the repo
+  and the running app go public at the cutoff — reused the fictional A2
+  gallery courses instead.
+  Evidence: documented in `README.md`. Missing: a test asserting seed course
+  codes match the gallery's `SLOP####` pattern rather than a real ANU code,
+  so a future edit can't silently reintroduce one. Stage 2.
+  Commit: [`93dfd7c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/93dfd7c) (README.md).
 
 - **Guaranteed a clash-free timetable exists.** Session times come from a
   seeded PRNG, so a naive generator could hand every visitor an unwinnable
@@ -28,33 +40,41 @@ it helped (evidence), and the real commit hash.
   the placement algorithm regressed to something unguaranteed.
   Commit: [`40763c0`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/40763c0).
 
-- **Dropped `messages` and its dead starter plumbing.** The new schema
-  (`courses`/`activities`/`sessions`/`picks`) drops the `messages` table
-  entirely. Obvious alternative: leave `api/messages.ts`, `api/events.ts`,
-  `lib/events.ts` and `spec/guestbook.test.ts` in place, since Stage 1 isn't
-  supposed to touch pages/routes/UI. Instead: deleted that plumbing, since it
-  had no table left to read from, rather than leaving dead code in the repo.
-  Evidence: before/after — `pnpm check` stays green with the files gone;
-  nothing in the app referenced them once `messages` was removed.
+- **Turned on foreign-key enforcement.** Obvious alternative: trust the
+  composite FK declared on `picks` in `schema.ts` to actually be enforced by
+  SQLite. Instead: SQLite disables FK enforcement per-connection by default
+  in better-sqlite3, which would have left `picks.(session_id, activity_id)`
+  declared but never checked — added `client.pragma("foreign_keys = ON")`
+  before running migrations.
+  Evidence: the pragma is in `db.ts`. Missing: a test that inserting a
+  `picks` row with a mismatched `(session_id, activity_id)` pair is actually
+  rejected, once the picks API exists to exercise it. Stage 2.
   Commit: [`438123e`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/438123e).
 
-## Watching, not yet moments
+- **Fixed the swap/clash ordering bug.** Reviewing the plan (not yet any
+  code), found that changing a pick to a different session of the same
+  activity would delete the old pick and insert the new one without
+  clash-checking the new session against the owner's *other* picks first —
+  a swap could silently create a clash, or fail after the old pick was
+  already gone. Obvious alternative: build straight from that version.
+  Instead: clash-check the candidate against the owner's other picks
+  (excluding the one being replaced) *before* deleting or inserting
+  anything; on a clash, reject and leave the old pick untouched.
+  Evidence: none yet — the fix exists only as reasoning from this session,
+  not in anything committed. Missing: the picks API itself, plus a
+  regression test that swapping into a clashing session is rejected and
+  leaves the original pick untouched. Stage 2.
+  Commit: pending: Stage 2.
 
-Real corrections with no committed rule/check/deletion behind them yet — not
-logged as moments above, but tracked here so they aren't lost. Move up once
-Stage 2 actually lands the check:
-
-- FK enforcement: `client.pragma("foreign_keys = ON")` in `db.ts` (part of
-  `438123e`) — SQLite disables FK enforcement per-connection by default,
-  which would've left the `picks` composite FK declared but unenforced. No
-  test yet exercises a mismatched `(session_id, activity_id)` insert.
-- Swap/clash ordering: changing a pick to a different session of the same
-  activity must clash-check the candidate against the owner's *other* picks
-  (excluding the one being replaced) *before* deleting or inserting anything
-  — caught during plan review, not yet built. No picks API or regression
-  test exists yet.
-- Per-browser ownership: rejected a shared single timetable + two-page split
-  (the starter's guestbook shape) in favour of a per-browser `owner_id`
-  cookie and one page, since everyone opening the crit URL at once would
-  trample each other's picks. Decided before any code existed; no test yet
-  that two different cookies get independent timetables.
+- **Rejected the shared-timetable, two-page design.** The first shape
+  considered mirrored the starter's guestbook: one timetable shared by every
+  visitor, and a two-page split (grid + course-browse). Everyone opening the
+  crit URL at once would trample each other's picks, and reloading to see
+  state is the exact problem this app is meant to fix. Obvious alternative:
+  keep that shape, since it's what the starter already does. Instead:
+  per-browser `owner_id` cookie (independent timetable per visitor) and a
+  single page.
+  Evidence: none yet — decided before any code existed. Missing: a test that
+  two different cookies get independent timetables (a pick under one
+  `owner_id` is invisible to another). Stage 2.
+  Commit: pending: Stage 2.

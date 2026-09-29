@@ -18,16 +18,17 @@ what the agent needs to carry from any of it is your call.
 
 - Read the `PROCESS.md` template in this repo and the [Assessment
   page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/).
-  Watch for harness moments during the work: a real fork where a mistake or
-  risk was turned into a rule in `CLAUDE.md`, a check or test in `spec/`, or
-  an attempt thrown away and committed as a deletion. When one happens, log
-  it in `process-notes.md` and tell me.
-- Don't log chat-only corrections, renames, tool workarounds, or progress
-  notes.
+  Watch for a real fork during the work: a point where the obvious thing
+  carried a mistake or risk, and we did something else instead for a
+  reason. Log it in `process-notes.md` and tell me — the rule in
+  `CLAUDE.md`, check in `spec/`, or deletion it deserves doesn't have to
+  exist yet, but say exactly what's missing and which stage adds it.
+- Don't log chat-only corrections, renames, tool workarounds, progress
+  notes, or mechanical cleanup with no real alternative considered.
 - For each entry, record: what happened, the obvious alternative, what we
-  did instead, why it helped (evidence: a failing-then-passing test, a run
-  output, or a before/after), and the commit hash. The commit must really
-  exist — get it from `git log`/`git show`, never invent one.
+  did instead, why it helped (evidence, or what's missing), and the commit
+  hash — real, from `git log`/`git show`, or `pending: Stage N` if nothing's
+  committed yet. Never invent a hash.
 - Before shipping: remind me to write `PROCESS.md` — pick only the most
   important moment from `process-notes.md` and write it up as a coherent,
   clearly reasoned narrative of the whole build, brief to harness. A crit
