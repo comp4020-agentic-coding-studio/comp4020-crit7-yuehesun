@@ -132,4 +132,4 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   override at either call site) — a snapshot test comparing the full-page
   render's fragment markup to the API's fragment response would close this,
   not yet written given the time budget.
-  Commit: pending: Stage 2c.
+  Commit: [`4de44ab`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/4de44ab) (`src/lib/fragments.ts` and its two call sites).
