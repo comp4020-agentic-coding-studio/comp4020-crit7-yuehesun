@@ -13,6 +13,15 @@ from a deterministic function instead of hand-typing it, and de-prioritises
 the no-JS fallback relative to the JS partial-update path (the actual point
 of this prototype). Supersedes revision 2.
 
+Revision 4: the seed generator now guarantees a clash-free full selection
+exists (by construction, not by search) alongside deliberately forced
+clashes, adds a re-runnable seeded-data summary command, fixes the
+undefined "click a grid block" behaviour from §4, records my view on
+server-rendered HTML fragments vs. JSON for the later JS path (not built
+yet), and closes the `session_id`/`activity_id` consistency gap on `picks`
+with a composite foreign key. Supersedes revision 3 in the sections below;
+everything not mentioned here is unchanged.
+
 ## 1. The slice
 
 C7's brief: pick an ANU system that reliably ruins your week and build the
@@ -51,14 +60,17 @@ sessions
   end_minutes   int not null        -- multiple of 30
   location      text not null       -- invented room
 
+  unique (id, activity_id)          -- lets picks reference the pair, see below
+
 picks
   id          int pk autoincrement
   owner_id    text not null         -- from the anonymous per-browser cookie, §7
-  session_id  int not null -> sessions.id
-  activity_id int not null -> activities.id   -- denormalised, see below
+  session_id  int not null
+  activity_id int not null          -- denormalised, see below
   created_at  text not null default (datetime('now'))
 
   unique (owner_id, activity_id)
+  foreign key (session_id, activity_id) references sessions (id, activity_id)
 ```
 
 Changes from revision 2, and why:
@@ -83,6 +95,21 @@ Changes from revision 2, and why:
   comparison clash check, no `description`/`level`/`term` on `courses`,
   `owner_id` cookie-scoped ownership — carries over from revision 2
   unchanged.
+
+**Revision 4 addition — closing the denormalisation gap.** Denormalising
+`activity_id` onto `picks` (above) only pays for itself if the database can
+actually stop it disagreeing with `session_id`. Fixed with a composite
+foreign key rather than a test-only guarantee: `sessions` gets a
+`unique (id, activity_id)` constraint (free, since `id` is already unique —
+this doesn't allow any new rows, it just makes the pair addressable), and
+`picks.(session_id, activity_id)` is declared as a composite foreign key
+against it. Since a given `sessions.id` only ever pairs with its own real
+`activity_id` in that unique index, the only `activity_id` value SQLite will
+accept for a given `session_id` *is* that session's actual activity — a
+mismatched pair is rejected at insert time, not just avoided by careful
+application code. §10 adds a test that deliberately attempts a mismatched
+insert and asserts SQLite rejects it, so the constraint itself is exercised
+by the suite rather than trusted by inspection.
 
 ## 3. Seed data
 
@@ -119,6 +146,43 @@ fresh clone). Concretely:
   after `migrate()`, only if `courses` is empty — same mechanism as before,
   still no live fetch of the gallery site at runtime.
 
+**Guaranteeing a clash-free full selection exists (revision 4).** A
+generator that scatters every alternative session with a seeded PRNG and
+separately forces a few deliberate overlaps has no reason to guarantee that
+picking *one session per activity, across all activities in all 4 courses*
+is even possible without a clash somewhere — and if it isn't, the demo has
+no "happy path" to show. Checking this after the fact would mean a
+combinatorial search (activities × alternatives across 4 courses is too
+large to brute-force honestly). Instead it's **guaranteed by construction**:
+
+1. The generator first builds one **baseline session per activity** —
+   chosen so that, across every activity in all 4 courses, no two baseline
+   sessions overlap. This is the reference clash-free selection, built
+   directly (placing each activity's baseline in a free slot relative to
+   the baselines already placed), not searched for.
+2. Each activity's *remaining* alternative sessions (to reach the realistic
+   5–6, or 10+, count) are then generated around that baseline using the
+   seeded PRNG — free to overlap each other or the baselines, since realism
+   is the point, not clash-freedom.
+3. The specific forced-clash pairs (above) are added as extra alternatives
+   distinct from the baseline sessions, so forcing a clash can never
+   accidentally remove the guarantee from step 1.
+4. The generator's return value exposes which sessions are the baseline
+   (e.g. a `baseline: true` flag, or a separate `baselineSessionIds` list)
+   so §10's test can assert non-overlap directly against that known set —
+   a property check, not a search.
+
+**Re-runnable seeded-data summary (revision 4).** `pnpm db:summary` (new
+script, `scripts/seed-summary.ts`) connects to the real `DATABASE_PATH`
+database — the same one the running app uses, not a re-generation — and
+prints, per course: its activities (code), each activity's session count,
+and its time range (earliest start–latest end, as `HH:MM`). It also lists
+the 4 gallery courses used (code + title, straight from the `courses`
+table), specifically so you can cite them by name in `PROCESS.md`/`README.md`
+for crediting. Re-runnable rather than a one-off log line, so it can be
+checked again anytime the seed changes, without re-reading the generator's
+source to find out what it produced.
+
 ## 4. Page and layout — one page
 
 Everything lives at `/`. Three regions:
@@ -153,10 +217,15 @@ Everything lives at `/`. Three regions:
   are computed from the seeded sessions, not hardcoded. Committed picks
   render as solid blocks in their course's colour spanning their half-hour
   tracks, course code + activity code visible in the block.
-  - **No Remove control on the grid itself** — clicking/tapping a block
-    only previews/inspects it (whatever §6 of the highlight design calls
-    for), so a stray tap while scanning the grid can't accidentally remove
-    a pick. Removal is a deliberate action taken in the panel, per above.
+  - **No Remove control on the grid itself, and clicking a block is fully
+    defined (fixes the undefined behaviour flagged in review):** clicking
+    or tapping a committed pick's block selects that pick's course in the
+    left list and opens its activities in the right panel (scrolled/focused
+    to the relevant activity), so you can inspect or swap it from there. It
+    never removes anything and never previews anything else — it's
+    navigation to the panel, not a grid-level action. Clicking an empty
+    grid cell (no pick there) does nothing, since an empty cell isn't
+    associated with any one session until a panel row is hovered/focused.
 
 `/readme/` is the only other route; `spec/routes.ts` stays `["/",
 "/readme/"]`.
@@ -185,6 +254,23 @@ priority order is:
    not a polished second UI — `spec/timetable.test.ts` (§10) exercises the
    HTTP layer directly anyway, which is what actually keeps it honest. It
    should *work*, but isn't where design or testing effort concentrates.
+
+**My view on how the JS path should render (not building this yet — a note
+for when milestone 2+ gets there).** Two options for what the `fetch`
+response carries: (a) JSON describing what changed, with client-side JS
+reconstructing the grid-cell/panel markup from it, or (b) server-rendered
+HTML fragments (a small JSON envelope of named snippets, e.g. `{ gridCell,
+panelActivity }`) that the client swaps in directly (`element.outerHTML =
+fragment`). I'd reach for (b). This app is Astro SSR with no client
+framework or state store — option (a) means a second, hand-maintained
+implementation of "what a picked session looks like" living in client JS,
+which can drift from the server-rendered version the full-page load and the
+no-JS fallback already use. Option (b) means exactly one rendering
+implementation (an Astro partial/component reused by the full page and by
+the API route for its fragment response); client JS shrinks to "swap this
+node's HTML in" plus the preview highlight logic (§8), which was always
+client-only. Worth reconsidering only if a need for client-side state that
+has no server round-trip shows up later — nothing in this plan needs that.
 
 ## 6. Clash handling — including the swap fix
 
@@ -275,8 +361,25 @@ accounts, capacity/quota/waitlisting, prerequisite checking.
     `(owner_id, activity_id)` — a direct test of the `unique` constraint
     from §2, independent of the application logic that's supposed to avoid
     triggering it.
+  - the database itself refuses a `picks` row whose `(session_id,
+    activity_id)` pair doesn't actually match a real session — a direct
+    test of the composite foreign key from §2.
 - `spec/invariants.test.ts` and `spec/readme.test.ts` untouched;
   `spec/routes.ts` stays `["/", "/readme/"]`.
+
+**New — `spec/seed.test.ts`, testing the generator itself** (a pure-function
+unit test, no HTTP calls; matches `vitest.config.ts`'s existing
+`spec/**/*.test.ts` glob, though it doesn't depend on the running-server
+`global-setup.ts` the way the HTTP-level tests above do):
+
+  - every generated session's `start_minutes`/`end_minutes` are multiples
+    of 30, and `end_minutes > start_minutes`.
+  - the baseline set (§3) is mutually non-overlapping — the clash-free
+    full-selection guarantee, checked directly against the known baseline,
+    not searched for.
+  - each pair the generator deliberately forced to clash (§3) actually does
+    overlap in the generated output — catching a typo/off-by-one in the
+    forcing logic itself, not just trusting it was written correctly.
 
 ## 11. Verifying what tests can't: human judgement, in a real browser
 
@@ -295,11 +398,24 @@ actually verified.
 
 Per `CLAUDE.md`: commits land incrementally, with a `process-notes.md`
 entry and a note to you at each milestone. **First milestone, and the only
-one to build before the next review: schema + migration + seed generator +
-a readable console/log summary of what was seeded** (per course: its
-activities, each activity's session count, and its time range) — no pages,
-no API routes, no UI yet. Stop there and wait for review before continuing
-to the grid/panel skeleton.
+one to build before the next review:**
+
+- `src/lib/schema.ts` — the four tables, including the `unique
+  (owner_id, activity_id)` constraint and the `sessions (id, activity_id)`
+  / `picks (session_id, activity_id)` composite foreign key.
+- the migration `pnpm db:generate` produces from it.
+- `src/lib/seed.ts` — the deterministic generator: the 4 hand-typed courses
+  (real gallery entries), authored per-course activity shapes, seeded-PRNG
+  alternative sessions, the constructed clash-free baseline, and the
+  deliberately forced clash pairs.
+- `spec/seed.test.ts` — the generator's own invariants (30-minute
+  multiples, `end > start`, baseline non-overlap, forced clashes real).
+- `pnpm db:summary` (`scripts/seed-summary.ts`) — reads the live database
+  and prints the per-course/per-activity summary, plus the list of the 4
+  gallery courses used for crediting.
+
+No pages, no API routes, no UI yet. Stop there and wait for review before
+continuing to the grid/panel skeleton.
 
 ## 13. Open questions for review
 
