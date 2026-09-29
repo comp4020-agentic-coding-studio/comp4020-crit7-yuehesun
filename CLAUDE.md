@@ -61,6 +61,16 @@ what the agent needs to carry from any of it is your call.
   yet, mark it pending: say exactly what is missing and which stage adds it.
 - Don't log chat-only corrections, renames, tool workarounds, progress
   notes, or mechanical cleanup with no real alternative considered.
+- Entries record *my* decisions, not the agent's own technical trouble.
+  A bug the agent hit and fixed by itself (a broken migration, a flaky
+  script, a library quirk) isn't a fork moment unless it changed a
+  judgment call I made — don't log it. What belongs here is a point where
+  I chose not to take the agent's word for something, overruled its
+  first answer, or made a call it couldn't have made for me.
+- Write every entry from my point of view, in plain language a non-coder
+  could follow: what I was told, what I decided instead, and why — no
+  internals, stack traces, or library/framework names unless I need them
+  to explain my own reasoning.
 - For each entry, record: what happened, the obvious alternative, what we
   did instead, why it helped (evidence, or what's missing), and the commit
   hash — real, from `git log`/`git show`, or `pending: Stage N` if nothing's
