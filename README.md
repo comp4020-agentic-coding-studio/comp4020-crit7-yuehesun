@@ -8,11 +8,13 @@ What this is, in a paragraph: the thing, and what it's for.
 
 ## What good looks like here
 
-Say what good means for this app: what you decided, what you read or looked at
-while deciding, and what you chose not to build. The rules that decision
-produced live in `CLAUDE.md` and the checks that protect it live in `spec/`;
-this is the argument they came from, so say which parts of good are enforced and
-which are judgement calls.
-
-Images go in `public/` and are linked relatively --- `![alt](public/before.png)`
---- which renders on GitHub and at `/readme/` alike.
+**Data.** This app never seeds real ANU data or personal information: the repo
+(and the running app) go public at the cutoff, so anything real landed in the
+database — actual course codes tied to actual rooms, anyone's actual name —
+would leak. Course/room data is instead handwritten or copied in from
+[our A2 gallery](https://courses.slop.university/) (fictional courses already
+published, publicly, as part of Assignment 2), landed as a one-off seed rather
+than fetched live: the app's own SQLite database stays the single source of
+truth at runtime, and doesn't depend on an external site staying up. This is a
+judgement call — no check in `spec/` enforces it, only the fact that nothing
+real appears in the seed data.
