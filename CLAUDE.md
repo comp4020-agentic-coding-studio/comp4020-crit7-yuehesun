@@ -10,16 +10,20 @@ where it lives --- `fly.toml`, the `Dockerfile`, the CI workflow and
 publishes this deliverable's brief and spec. Read them before you plan or build;
 what the agent needs to carry from any of it is your call.
 
-## Process discipline
+## Commits
 
 - Commit incrementally, and tell me after each commit — no batching.
+
+## Process
+
 - A moment = a real fork: the obvious alternative, what we did instead, why
   it helped. Log it in `process-notes.md` with exactly one tag: **harness**
   (a rule/check/test/deletion is actually committed), **pending** (the
   correction is real but nothing enforces it yet — say what's missing and
   which stage adds it), or **retry** (only fixed in chat, not citable).
 - `plan.md` is scratch, never citable evidence.
-- `PROCESS.md` is curated and citable-only — only I promote into it; don't
-  edit its content unless I explicitly ask.
-- Before shipping: remind me to trim `PROCESS.md` to 150–300 words and write
+- `PROCESS.md` stays empty while we build. Once all coding is done, we sit
+  down together and choose which `process-notes.md` moments get promoted —
+  don't fill it in along the way, even from a strong harness moment.
+- Before shipping: trim `PROCESS.md` to 150–300 words and write
   `reflections/crit-7.md` from `process-notes.md`, kept moments or not.
