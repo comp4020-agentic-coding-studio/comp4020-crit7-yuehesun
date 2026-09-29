@@ -4,13 +4,16 @@ Candidate moments, kept as they happen. This is scratch, not the submission —
 `PROCESS.md` stays empty until all the coding is done, then we pick the most
 important moment(s) from here together. Not checked by `pnpm check:evidence`.
 
-A moment is a real fork: a point where the obvious thing to do carried a
-mistake or a risk, and we did something else instead for a reason. What makes
-it worth logging is the judgment call, not whether the artifact happens to be
-a rule, a check, or a deletion — a decision can be logged here before its
-enforcing test lands, as long as we say what's missing and when it's coming.
-Not logged here: chat-only corrections, renames, tool workarounds, progress
-notes, or mechanical cleanup with no real alternative considered.
+A moment is a real fork: a point where the obvious approach — to the build,
+or to how we work together — carried a mistake or a risk, and we did
+something else instead for a reason. That covers product decisions (the
+obvious design was rejected) and workflow decisions (a choice that changed
+how we direct or check this work) alike. What makes it worth logging is the
+judgment call, not whether the artifact happens to be a rule, a check, or a
+deletion — a decision can be logged here before its enforcing test lands, as
+long as we say what's missing and when it's coming. Not logged here:
+chat-only corrections, renames, tool workarounds, progress notes, or
+mechanical cleanup with no real alternative considered.
 
 Each entry: what happened, the obvious alternative, what we did instead, why
 it helped (evidence, or what's still missing), and the commit hash — real,
@@ -39,17 +42,6 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   non-overlapping"` test — a real check, currently green, that would fail if
   the placement algorithm regressed to something unguaranteed.
   Commit: [`40763c0`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/40763c0).
-
-- **Turned on foreign-key enforcement.** Obvious alternative: trust the
-  composite FK declared on `picks` in `schema.ts` to actually be enforced by
-  SQLite. Instead: SQLite disables FK enforcement per-connection by default
-  in better-sqlite3, which would have left `picks.(session_id, activity_id)`
-  declared but never checked — added `client.pragma("foreign_keys = ON")`
-  before running migrations.
-  Evidence: the pragma is in `db.ts`. Missing: a test that inserting a
-  `picks` row with a mismatched `(session_id, activity_id)` pair is actually
-  rejected, once the picks API exists to exercise it. Stage 2.
-  Commit: [`438123e`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/438123e).
 
 - **Fixed the swap/clash ordering bug.** Reviewing the plan (not yet any
   code), found that changing a pick to a different session of the same

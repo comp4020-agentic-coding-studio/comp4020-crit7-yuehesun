@@ -18,9 +18,10 @@ what the agent needs to carry from any of it is your call.
 
 - Read the `PROCESS.md` template in this repo and the [Assessment
   page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/).
-  Watch for a real fork during the work: a point where the obvious thing
-  carried a mistake or risk, and we did something else instead for a
-  reason. Log it in `process-notes.md` and tell me — the rule in
+  Watch for a real fork during the work: a point where the obvious
+  approach — to the build, or to how we work together — carried a mistake
+  or risk, and we did something else instead for a reason. Log it in
+  `process-notes.md` and tell me — the rule in
   `CLAUDE.md`, check in `spec/`, or deletion it deserves doesn't have to
   exist yet, but say exactly what's missing and which stage adds it.
 - Don't log chat-only corrections, renames, tool workarounds, progress
