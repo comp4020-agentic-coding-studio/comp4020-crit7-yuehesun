@@ -140,8 +140,13 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   reading the code text. Obvious alternative: add a `kind` column to
   `activities` (enum: lecture/tutorial/lab/assessment) so the renderer could
   branch on real data. Instead: a display-only heuristic in
-  `src/lib/fragments.ts` (`isLecture` — a `code.startsWith("Lec")` check)
-  layering a stripe pattern onto non-lecture blocks, no schema change.
+  `src/lib/fragments.ts` (`isLecture` — a `code.startsWith("Lec")` check,
+  later extracted to its own module: [[lecture-permissive-overlap]])
+  distinguishing non-lecture blocks visually, no schema change. (The visual
+  treatment itself was revised once, from a diagonal stripe to a left-edge
+  `box-shadow` bar, in `4c26f6f` — the stripe's white overlay lightened the
+  fill so it no longer read as the course's true colour; a mechanical CSS
+  fix, not a second fork, so not its own entry.)
   Reason: `src/lib/schema.ts` already documents `activities.code` as
   deliberately free text, not an enum, because "real course structures vary
   too much for a fixed set of activity kinds" — a `kind` column would
@@ -150,5 +155,41 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   Evidence: `src/lib/schema.ts`'s comment above the `activities` table is
   the standing rule this followed. Missing: no test pins the "Lec* prefix ⇒
   lecture" convention, so a future seed course using a different lecture
-  prefix would silently lose the stripe with nothing failing red.
-  Commit: [`d146d4d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/d146d4d) (`src/lib/fragments.ts`, `src/styles.css`).
+  prefix would silently lose the distinguishing treatment with nothing
+  failing red.
+  Commit: [`d146d4d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/d146d4d) (`src/lib/fragments.ts`, `src/styles.css`); visual revision in [`4c26f6f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/4c26f6f) (`src/styles.css`).
+
+- **Made lecture overlaps allowed instead of always a clash.** <a id="lecture-permissive-overlap"></a>
+  Every overlap so far had been rejected outright: `addOrSwapPick` treated
+  any two time-overlapping picks as a clash regardless of activity kind.
+  ANU lectures aren't attendance- or mark-checked, so a visitor can
+  reasonably "attend" two lectures at once, or a lecture alongside a
+  tutorial — only two non-lecture activities (tutorial/lab/assessment)
+  genuinely competing for the same slot is a real clash. Obvious
+  alternative: keep the simple any-overlap-is-a-clash rule, since it's what
+  was already built and tested. Instead: `isDisallowedClash` narrows a clash
+  to "both sides non-lecture"; a lecture may overlap anything, and the grid
+  renders the overlap as a side-by-side split (`computeSlices`) rather than
+  picking one side to reject.
+  Reason: user-approved design change, with three explicit conditions —
+  the preview must split for any allowed overlap (not only a lecture
+  candidate), the seed/tests had to be updated for the new rule (forced
+  clashes non-lecture/non-lecture, a new forced-overlap fixture, the
+  clash-free baseline re-verified under the new rule), and the slice layout
+  had to be one shared pure function imported by both the server render and
+  the client preview — never two implementations that could drift.
+  Evidence: `spec/overlap.test.ts` (the shared `computeSlices`/
+  `isDisallowedClash` module, unit-tested in isolation) and
+  `spec/timetable.test.ts`'s `"allows a lecture and a non-lecture activity
+  to overlap"` test, both green; `spec/seed.test.ts` re-asserts every forced
+  clash is non-lecture/non-lecture and every forced overlap includes a
+  lecture. Missing: no automated browser check of the hover-preview split
+  (`src/scripts/timetable-client.ts`) — this repo has no browser-automation
+  tooling, so that path was verified by typecheck/reasoning, not by
+  observing it render, and is flagged to the user as such.
+  Commit: [`15da208`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/15da208) (shared `isLecture`/`kindClass`),
+  [`3f8382c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/3f8382c) (shared `overlap.ts` + tests),
+  [`1246c98`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/1246c98) (seed fixture + seed tests),
+  [`9bba39b`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/9bba39b) (the rule change + HTTP test),
+  [`db4be08`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/db4be08) (server-side slice rendering),
+  [`83a575f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/83a575f) (client-side preview splitting).
