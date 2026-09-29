@@ -22,6 +22,19 @@ yet), and closes the `session_id`/`activity_id` consistency gap on `picks`
 with a composite foreign key. Supersedes revision 3 in the sections below;
 everything not mentioned here is unchanged.
 
+Revision 5: terminology cleanup only, no design changes. Build steps are
+now called **Stage 1, Stage 2, …** ("milestone" is reserved for the key
+moments recorded in `process-notes.md`, per `CLAUDE.md`'s process
+discipline — the two words meant different things and were being used
+interchangeably). Also added the Status line immediately below, so this
+file stands on its own if the conversation that produced it is gone.
+
+**Status: Stage 1 is approved and not yet started.** Nothing beyond
+`plan.md` itself has been built or committed for this feature yet. Stage 1
+is schema + migration + seed generator + the summary command only — see
+§12 for the exact scope and stop condition. Do not start UI, API routes, or
+pages: those are Stage 2+, not yet planned in detail and not approved.
+
 ## 1. The slice
 
 C7's brief: pick an ANU system that reliably ruins your week and build the
@@ -256,7 +269,7 @@ priority order is:
    should *work*, but isn't where design or testing effort concentrates.
 
 **My view on how the JS path should render (not building this yet — a note
-for when milestone 2+ gets there).** Two options for what the `fetch`
+for when Stage 2+ gets there).** Two options for what the `fetch`
 response carries: (a) JSON describing what changed, with client-side JS
 reconstructing the grid-cell/panel markup from it, or (b) server-rendered
 HTML fragments (a small JSON envelope of named snippets, e.g. `{ gridCell,
@@ -397,8 +410,12 @@ actually verified.
 ## 12. Process
 
 Per `CLAUDE.md`: commits land incrementally, with a `process-notes.md`
-entry and a note to you at each milestone. **First milestone, and the only
-one to build before the next review:**
+entry and a note to you at each milestone (a `process-notes.md` moment —
+not the same thing as a build stage; see the Status line above). Work is
+broken into stages; **Stage 1 is the only one approved to build, and the
+only one specified in detail here:**
+
+### Stage 1 (approved, not yet started)
 
 - `src/lib/schema.ts` — the four tables, including the `unique
   (owner_id, activity_id)` constraint and the `sessions (id, activity_id)`
@@ -414,8 +431,8 @@ one to build before the next review:**
   and prints the per-course/per-activity summary, plus the list of the 4
   gallery courses used for crediting.
 
-No pages, no API routes, no UI yet. Stop there and wait for review before
-continuing to the grid/panel skeleton.
+**No pages, no API routes, no UI in Stage 1.** Stop after Stage 1 and wait
+for review before planning or starting Stage 2 (the grid/panel skeleton).
 
 ## 13. Open questions for review
 
@@ -423,4 +440,4 @@ continuing to the grid/panel skeleton.
   resolved (per-row, kept). Remaining judgement calls (exact 4 courses, the
   per-course colour palette, the specific per-course activity shapes and
   which slots are forced to clash) will be made concretely inside the
-  seed generator at milestone 1, where they're easiest to see and adjust.
+  seed generator during Stage 1, where they're easiest to see and adjust.

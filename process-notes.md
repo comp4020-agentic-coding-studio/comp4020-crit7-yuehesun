@@ -13,3 +13,8 @@ automatically. Not checked by `pnpm check:evidence`.
   and `PROCESS.md` ([`9c7af09`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/9c7af09)).
 - **Set process discipline in `CLAUDE.md`** (2026-09-29): incremental commits,
   this running log, a pre-ship trim reminder, a reflection reminder.
+- **Revision 5 of `plan.md`: terminology cleanup** (2026-09-29): "milestone"
+  was doing double duty for both build steps and `process-notes.md` moments.
+  Renamed build steps to Stage 1, Stage 2, … throughout, and added a Status
+  line so the plan states Stage 1's approval state on its own, without
+  needing the conversation that produced it.
