@@ -106,3 +106,30 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   fixture, no HTTP)"` block — both constraint tests pass without opening or
   writing `.data/app.db`.
   Commit: [`e07e1ba`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/e07e1ba).
+
+- **Shared "what a picked session looks like" as plain TS functions, not
+  Astro-component rendering.** `plan.md` §5 names the obvious approach
+  explicitly: "one Astro partial/component reused by the full page and by
+  the API route for its fragment response" — implying Astro's Container API
+  (`astro/container`), which can render a `.astro` component to a string
+  from inside an API route. Instead: `src/lib/fragments.ts` holds plain
+  TypeScript functions (`renderGridPick`, `renderActivityPanel`,
+  `renderClashDialogInner`) that build the HTML strings directly;
+  `index.astro` calls them via `<Fragment set:html={...} />` and
+  `src/pages/api/picks*.ts` call the same functions for their JSON fragment
+  responses. Reason: with ~10.5h left, the Container API is a less-used
+  Astro surface (per-request container construction, `renderToString`
+  semantics for a non-page component, slot/locals plumbing) with real risk
+  of eating the remaining budget on something that isn't the deliverable;
+  plain functions get the thing the plan actually cares about — one
+  implementation, not two that can drift — without that risk, at the cost
+  of writing HTML as strings instead of JSX.
+  Evidence: `src/lib/fragments.ts` is the only place any of these three
+  fragments are built; `index.astro` and `src/pages/api/picks.ts` /
+  `src/pages/api/picks/remove.ts` all import and call it rather than
+  reimplementing the markup. Missing: no test asserts the two call sites
+  stay in sync (nothing stops a future edit from inlining a one-off
+  override at either call site) — a snapshot test comparing the full-page
+  render's fragment markup to the API's fragment response would close this,
+  not yet written given the time budget.
+  Commit: pending: Stage 2c.

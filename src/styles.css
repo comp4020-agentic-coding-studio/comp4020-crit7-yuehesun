@@ -221,6 +221,36 @@ a {
   outline-offset: -2px;
 }
 
+/* Preview highlight (plan.md §8): hover/focus/touchstart on any session row
+   ghosts its slot on the grid — translucent fill, raised border/shadow — so
+   a visitor can see where an alternative would land before committing. */
+.grid-pick.preview {
+  pointer-events: none;
+  opacity: 0.55;
+  border: 2px solid rgba(15, 23, 42, 0.6);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.3);
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .grid-pick {
+    transition:
+      opacity 0.2s ease,
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
+  }
+}
+
+.session-list li[data-day] {
+  cursor: pointer;
+}
+
+.session-list li[data-day]:hover,
+.session-list li[data-day]:focus-visible {
+  outline: 2px solid #94a3b8;
+  outline-offset: -2px;
+}
+
 /* --- clash dialog (plan.md §6 step 6) ----------------------------------- */
 
 dialog {
@@ -232,6 +262,17 @@ dialog {
 
 dialog::backdrop {
   background: rgba(15, 23, 42, 0.4);
+}
+
+dialog a.button {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 0.25rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
 }
 
 /* --- responsive: 390x844 (plan.md §4) ----------------------------------- */

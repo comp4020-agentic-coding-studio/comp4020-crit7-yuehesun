@@ -96,7 +96,7 @@ function sessionLabel(session: GeneratedSession): string {
 
 function isPicked(html: string, session: GeneratedSession): boolean {
   const label = sessionLabel(session);
-  const blocks = [...html.matchAll(/<li class="picked">([\s\S]*?)<\/li>/g)].map((m) => m[1].replace(/\s+/g, " "));
+  const blocks = [...html.matchAll(/<li class="picked"[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1].replace(/\s+/g, " "));
   return blocks.some((block) => block.includes(label));
 }
 

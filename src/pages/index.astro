@@ -1,13 +1,15 @@
 ---
 import "../styles.css";
 import { getSessionInfo, gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwner } from "../lib/db";
-import { DAY_LABELS, formatMinutes } from "../lib/format";
+import { renderActivityPanel, renderClashDialogInner, renderGridPick } from "../lib/fragments";
+import { DAY_LABELS } from "../lib/format";
 
 // Stage 2a: the real 3-region shell, server-rendered from the seeded data —
 // course list (left), week grid (main), session panel (right). Course
 // selection is a plain `?course=` link so the whole page works with no JS.
-// Stage 2b adds the Add/Remove write path and the no-JS clash dialog; the
-// JS partial-update/preview layer is Stage 2c. See plan.md §4/§6.
+// Stage 2b adds the Add/Remove write path and the no-JS clash dialog. Stage
+// 2c adds the JS partial-update/preview layer (bottom `<script>`), reusing
+// the exact same fragment renderers as the API's JSON responses (plan §5).
 const ownerId = Astro.locals.ownerId;
 
 const courses = listCourses();
@@ -28,10 +30,6 @@ const clashWithSession = withParam ? getSessionInfo(Number(withParam)) : undefin
 const { startHour, endHour } = gridHourRange();
 const halfHourSlots = (endHour - startHour) * 2;
 const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
-
-function rowForMinutes(minutes: number): number {
-  return 2 + (minutes - startHour * 60) / 30;
-}
 ---
 
 <!doctype html>
@@ -74,7 +72,7 @@ function rowForMinutes(minutes: number): number {
         <section class="grid-wrap" aria-labelledby="grid-heading">
           <h2 id="grid-heading">Your timetable</h2>
           <div class="grid-scroll">
-            <div class="grid" style={`grid-template-rows: ${gridTemplateRows}`}>
+            <div class="grid" id="grid" style={`grid-template-rows: ${gridTemplateRows}`}>
               {
                 DAY_LABELS.map((day, dayIndex) => (
                   <div class="grid-day-header" style={`grid-column: ${dayIndex + 2}; grid-row: 1`}>
@@ -98,18 +96,10 @@ function rowForMinutes(minutes: number): number {
               }
               {
                 picks.map((pick) => (
-                  <a
-                    class={`grid-pick${pick.sessionId === clashWithSession?.sessionId ? " clash" : ""}`}
-                    href={`/?course=${pick.courseId}`}
-                    style={`grid-column: ${pick.day + 2}; grid-row: ${rowForMinutes(pick.startMinutes)} / span ${
-                      (pick.endMinutes - pick.startMinutes) / 30
-                    }; background: ${pick.courseColor}`}
-                  >
-                    {pick.sessionId === clashWithSession?.sessionId && <span aria-hidden="true">⚠ </span>}
-                    {pick.courseCode} · {pick.activityCode}
-                  </a>
+                  <Fragment set:html={renderGridPick(pick, startHour, pick.sessionId === clashWithSession?.sessionId)} />
                 ))
               }
+              <div class="grid-pick preview" id="grid-preview" hidden aria-hidden="true" />
             </div>
           </div>
         </section>
@@ -124,41 +114,15 @@ function rowForMinutes(minutes: number): number {
                 {activities.map((activity) => {
                   const pickedSessionId = pickedSessionByActivity.get(activity.id);
                   return (
-                    <div class="activity">
-                      <h3>
-                        {activity.code}
-                        {pickedSessionId !== undefined && (
-                          <>
-                            {" "}
-                            <span aria-hidden="true">✓</span>
-                            <span class="sr-only">picked</span>
-                          </>
-                        )}
-                      </h3>
-                      <ul class="session-list">
-                        {activity.sessions.map((session) => (
-                          <li class={session.id === pickedSessionId ? "picked" : undefined}>
-                            <span>
-                              {DAY_LABELS[session.day]} {formatMinutes(session.startMinutes)}–
-                              {formatMinutes(session.endMinutes)} · {session.location}
-                            </span>
-                            {session.id === pickedSessionId ? (
-                              <form method="POST" action="/api/picks/remove">
-                                <input type="hidden" name="activityId" value={activity.id} />
-                                <input type="hidden" name="courseId" value={selectedCourse.id} />
-                                <button type="submit">Remove</button>
-                              </form>
-                            ) : (
-                              <form method="POST" action="/api/picks">
-                                <input type="hidden" name="sessionId" value={session.id} />
-                                <input type="hidden" name="courseId" value={selectedCourse.id} />
-                                <button type="submit">Add</button>
-                              </form>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    <Fragment
+                      set:html={renderActivityPanel(
+                        activity,
+                        pickedSessionId,
+                        selectedCourse.id,
+                        startHour,
+                        selectedCourse.color,
+                      )}
+                    />
                   );
                 })}
               </>
@@ -170,28 +134,13 @@ function rowForMinutes(minutes: number): number {
       </div>
 
       {
-        clashSession && clashWithSession && (
-          <dialog open aria-labelledby="clash-heading">
-            <h2 id="clash-heading">That clashes with a session you already picked</h2>
-            <p>
-              <strong>
-                {clashSession.courseCode} {clashSession.activityCode}
-              </strong>{" "}
-              ({DAY_LABELS[clashSession.day]} {formatMinutes(clashSession.startMinutes)}–
-              {formatMinutes(clashSession.endMinutes)}) overlaps{" "}
-              <strong>
-                {clashWithSession.courseCode} {clashWithSession.activityCode}
-              </strong>{" "}
-              ({DAY_LABELS[clashWithSession.day]} {formatMinutes(clashWithSession.startMinutes)}–
-              {formatMinutes(clashWithSession.endMinutes)}), which is already on your timetable. Remove it first if
-              you want to make this swap.
-            </p>
-            <form method="dialog">
-              <button type="submit">OK</button>
-            </form>
+        clashSession && clashWithSession && selectedCourse && (
+          <dialog open id="clash-dialog" aria-labelledby="clash-heading">
+            <Fragment set:html={renderClashDialogInner(clashSession, clashWithSession, selectedCourse.id)} />
           </dialog>
         )
       }
     </main>
+    <script src="../scripts/timetable-client.ts"></script>
   </body>
 </html>
