@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
-import { gridHourRange, listActivitiesWithSessions, listCourses, removePick } from "../../../lib/db";
-import { renderActivityPanel } from "../../../lib/fragments";
+import { gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwnerWithSlices, removePick } from "../../../lib/db";
+import { renderActivityPanel, renderGridPick } from "../../../lib/fragments";
 
 export const prerender = false;
 
@@ -17,14 +17,22 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
   removePick(locals.ownerId, activityId);
 
   if (wantsJson(request)) {
+    const { startHour } = gridHourRange();
     let panelHtml: string | null = null;
     if (courseId !== undefined) {
-      const { startHour } = gridHourRange();
       const activity = listActivitiesWithSessions(courseId).find((a) => a.id === activityId);
       const courseColor = listCourses().find((c) => c.id === courseId)?.color;
       if (activity && courseColor) panelHtml = renderActivityPanel(activity, undefined, courseId, startHour, courseColor);
     }
-    return new Response(JSON.stringify({ ok: true, activityId, gridPickHtml: null, panelHtml }), {
+    // Removing a pick can free up space that lets remaining picks re-widen
+    // (e.g. removing one side of a split pair), so — same reasoning as
+    // /api/picks — the client gets the owner's whole remaining pick set
+    // re-rendered rather than a single removed-slot signal.
+    const gridPicks = listPicksForOwnerWithSlices(locals.ownerId).map((p) => ({
+      activityId: p.activityId,
+      html: renderGridPick(p, startHour, false),
+    }));
+    return new Response(JSON.stringify({ ok: true, activityId, gridPicks, panelHtml }), {
       headers: { "content-type": "application/json" },
     });
   }

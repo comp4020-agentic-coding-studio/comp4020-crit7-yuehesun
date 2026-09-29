@@ -1,6 +1,6 @@
 import { DAY_LABELS, formatMinutes } from "./format";
 import { kindClass } from "./activity-kind";
-import type { ActivityWithSessions, PickWithDetails, SessionInfo } from "./db";
+import type { ActivityWithSessions, PickWithSlice, SessionInfo } from "./db";
 
 // The single implementation of "what a picked session looks like" (plan.md
 // §5's option (b)): index.astro's full-page render and the /api/picks*
@@ -16,16 +16,27 @@ function rowSpan(startHour: number, startMinutes: number, endMinutes: number): {
   return { row: 2 + (startMinutes - startHour * 60) / 30, span: (endMinutes - startMinutes) / 30 };
 }
 
-export function renderGridPick(pick: PickWithDetails, startHour: number, clash: boolean): string {
+// sliceIndex/sliceCount come from the shared computeSlices layout
+// (src/lib/overlap.ts, via db.ts's listPicksForOwnerWithSlices) — the one
+// place that decides whether a pick is split and where. A sliceCount of 1
+// renders exactly as before (full width); sliceCount > 1 narrows the block
+// to an equal-width column and offsets it, so two allowed-overlapping picks
+// (a lecture and anything else) land side by side in the same grid cell.
+export function renderGridPick(pick: PickWithSlice, startHour: number, clash: boolean): string {
   const { row, span } = rowSpan(startHour, pick.startMinutes, pick.endMinutes);
   const warn = clash ? '<span aria-hidden="true">⚠ </span>' : "";
   const classes = ["grid-pick", kindClass(pick.activityCode), clash ? "clash" : ""].filter(Boolean).join(" ");
+  const sliceStyle =
+    pick.sliceCount > 1
+      ? ` width: calc(100% / ${pick.sliceCount}); margin-left: calc(100% / ${pick.sliceCount} * ${pick.sliceIndex});`
+      : "";
   return (
     `<a class="${classes}" href="/?course=${pick.courseId}" data-activity-id="${pick.activityId}" ` +
+    `data-day="${pick.day}" data-start="${pick.startMinutes}" data-end="${pick.endMinutes}" ` +
     // background-color (not the "background" shorthand) so the kind-based
     // stripe pattern below, set via background-image in styles.css, doesn't
     // get reset to none by this inline style.
-    `style="grid-column: ${pick.day + 2}; grid-row: ${row} / span ${span}; background-color: ${pick.courseColor}">` +
+    `style="grid-column: ${pick.day + 2}; grid-row: ${row} / span ${span}; background-color: ${pick.courseColor};${sliceStyle}">` +
     `${warn}${escapeHtml(pick.courseCode)} · ${escapeHtml(pick.activityCode)}</a>`
   );
 }
@@ -55,6 +66,7 @@ export function renderActivityPanel(
         : `<form method="POST" action="/api/picks"><input type="hidden" name="sessionId" value="${session.id}" /><input type="hidden" name="courseId" value="${courseId}" /><button type="submit">Add</button></form>`;
       return (
         `<li${picked ? ' class="picked"' : ""} data-day="${session.day}" data-row="${row}" data-span="${span}" ` +
+        `data-start="${session.startMinutes}" data-end="${session.endMinutes}" ` +
         `data-color="${courseColor}" data-kind="${kindClass(activity.code)}" data-label="${label}" tabindex="0">` +
         `<span>${timeText}</span>${action}</li>`
       );

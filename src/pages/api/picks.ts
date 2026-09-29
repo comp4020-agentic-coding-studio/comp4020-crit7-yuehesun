@@ -5,7 +5,7 @@ import {
   gridHourRange,
   listActivitiesWithSessions,
   listCourses,
-  listPicksForOwner,
+  listPicksForOwnerWithSlices,
 } from "../../lib/db";
 import { renderActivityPanel, renderClashDialogInner, renderGridPick } from "../../lib/fragments";
 
@@ -35,7 +35,10 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
     if (json) {
       const candidate = getSessionInfo(sessionId);
       const existing = getSessionInfo(result.clashWithSessionId);
-      const clashPick = listPicksForOwner(locals.ownerId).find((p) => p.sessionId === result.clashWithSessionId);
+      // Nothing was written, so nobody's slice layout changed: only the one
+      // already-picked session that clashed needs re-rendering (with the
+      // warning icon), not the owner's full pick set.
+      const clashPick = listPicksForOwnerWithSlices(locals.ownerId).find((p) => p.sessionId === result.clashWithSessionId);
       if (!candidate || !existing || !clashPick) return new Response("session not found", { status: 404 });
       return new Response(
         JSON.stringify({
@@ -52,7 +55,12 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
   }
 
   if (json) {
-    const pick = listPicksForOwner(locals.ownerId).find((p) => p.sessionId === sessionId);
+    // A write can reshuffle slice widths for picks other than the one just
+    // added (e.g. adding a lecture that now overlaps an existing tutorial
+    // splits both) — so the client gets the owner's whole current pick set
+    // re-rendered, not just the one that changed.
+    const picks = listPicksForOwnerWithSlices(locals.ownerId);
+    const pick = picks.find((p) => p.sessionId === sessionId);
     if (!pick) return new Response("pick not found", { status: 500 });
     let panelHtml: string | null = null;
     if (courseId !== undefined) {
@@ -60,10 +68,10 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       const courseColor = listCourses().find((c) => c.id === courseId)?.color;
       if (activity && courseColor) panelHtml = renderActivityPanel(activity, pick.sessionId, courseId, startHour, courseColor);
     }
-    return new Response(
-      JSON.stringify({ ok: true, activityId: pick.activityId, gridPickHtml: renderGridPick(pick, startHour, false), panelHtml }),
-      { headers: { "content-type": "application/json" } },
-    );
+    const gridPicks = picks.map((p) => ({ activityId: p.activityId, html: renderGridPick(p, startHour, false) }));
+    return new Response(JSON.stringify({ ok: true, activityId: pick.activityId, gridPicks, panelHtml }), {
+      headers: { "content-type": "application/json" },
+    });
   }
 
   return redirect(back, 303);

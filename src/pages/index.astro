@@ -1,6 +1,6 @@
 ---
 import "../styles.css";
-import { getSessionInfo, gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwner } from "../lib/db";
+import { getSessionInfo, gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwnerWithSlices } from "../lib/db";
 import { renderActivityPanel, renderClashDialogInner, renderGridPick } from "../lib/fragments";
 import { DAY_LABELS } from "../lib/format";
 
@@ -17,7 +17,7 @@ const requestedCourseId = Number(Astro.url.searchParams.get("course"));
 const selectedCourse = courses.find((c) => c.id === requestedCourseId) ?? courses[0];
 const activities = selectedCourse ? listActivitiesWithSessions(selectedCourse.id) : [];
 
-const picks = listPicksForOwner(ownerId);
+const picks = listPicksForOwnerWithSlices(ownerId);
 const pickedSessionByActivity = new Map(picks.map((p) => [p.activityId, p.sessionId]));
 
 // The no-JS path for a rejected Add/swap (plan.md §6 step 6): /api/picks
