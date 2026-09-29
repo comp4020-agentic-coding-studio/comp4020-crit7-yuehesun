@@ -1,4 +1,5 @@
 import { DAY_LABELS, formatMinutes } from "./format";
+import { kindClass } from "./activity-kind";
 import type { ActivityWithSessions, PickWithDetails, SessionInfo } from "./db";
 
 // The single implementation of "what a picked session looks like" (plan.md
@@ -13,20 +14,6 @@ function escapeHtml(value: string): string {
 
 function rowSpan(startHour: number, startMinutes: number, endMinutes: number): { row: number; span: number } {
   return { row: 2 + (startMinutes - startHour * 60) / 30, span: (endMinutes - startMinutes) / 30 };
-}
-
-// `activities.code` is deliberately free text, not an enum (schema.ts) —
-// real course structures vary too much for a fixed set of kinds. This is a
-// display-only heuristic on top of that free text, not a new source of
-// truth: every seeded activity code follows the "Lec*" convention for
-// lectures, so a prefix check is enough to tell lectures apart from
-// everything else (tutorials, labs, assessments) without a schema change.
-function isLecture(activityCode: string): boolean {
-  return activityCode.startsWith("Lec");
-}
-
-function kindClass(activityCode: string): string {
-  return isLecture(activityCode) ? "kind-lecture" : "kind-other";
 }
 
 export function renderGridPick(pick: PickWithDetails, startHour: number, clash: boolean): string {
