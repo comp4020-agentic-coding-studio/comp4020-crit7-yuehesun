@@ -22,10 +22,12 @@ Clicking a course shows its available slots as a list on the right side of the p
   API, JS partial-update + preview layer, and the lecture-permissive
   overlap rule (shared `computeSlices`/`isDisallowedClash`). `pnpm check`
   green: 6 test files, 54 tests, 0 typecheck errors.
-- Stage 2d remaining: remove `checks.yml`'s stale `/api/events`
-  deploy-verification step (starter SSE leftover), deploy to Fly (migration
-  hasn't run against the volume yet), a manual browser pass, then
-  `PROCESS.md`/`reflections/`.
+- Stage 2d in progress: `checks.yml`'s stale `/api/events` step removed
+  (55a26bd) and the real app deployed to Fly (v3, migration ran — write path
+  verified end-to-end against the live volume: persisted pick, no-JS 303,
+  JSON fragment response, HTTPS-origin and CSRF checks all correct). Left:
+  the manual browser pass at both viewports (§11), then `process-notes.md`,
+  `PROCESS.md`, and `reflections/crit-7.md`.
 - Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
 
 
