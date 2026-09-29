@@ -133,3 +133,22 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   render's fragment markup to the API's fragment response would close this,
   not yet written given the time budget.
   Commit: [`4de44ab`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/4de44ab) (`src/lib/fragments.ts` and its two call sites).
+
+- **Kept lecture-vs-tutorial colour coding out of the schema.** Manual
+  testing found same-course activities (a lecture and its tutorial) looked
+  identical on the grid — same course colour, distinguishable only by
+  reading the code text. Obvious alternative: add a `kind` column to
+  `activities` (enum: lecture/tutorial/lab/assessment) so the renderer could
+  branch on real data. Instead: a display-only heuristic in
+  `src/lib/fragments.ts` (`isLecture` — a `code.startsWith("Lec")` check)
+  layering a stripe pattern onto non-lecture blocks, no schema change.
+  Reason: `src/lib/schema.ts` already documents `activities.code` as
+  deliberately free text, not an enum, because "real course structures vary
+  too much for a fixed set of activity kinds" — a `kind` column would
+  directly contradict a design decision already made and recorded, to fix a
+  problem that's purely about how a pick *looks*, not what it *is*.
+  Evidence: `src/lib/schema.ts`'s comment above the `activities` table is
+  the standing rule this followed. Missing: no test pins the "Lec* prefix ⇒
+  lecture" convention, so a future seed course using a different lecture
+  prefix would silently lose the stripe with nothing failing red.
+  Commit: [`d146d4d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/d146d4d) (`src/lib/fragments.ts`, `src/styles.css`).
