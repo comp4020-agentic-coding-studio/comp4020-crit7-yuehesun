@@ -25,9 +25,18 @@ Clicking a course shows its available slots as a list on the right side of the p
 - Stage 2d in progress: `checks.yml`'s stale `/api/events` step removed
   (55a26bd) and the real app deployed to Fly (v3, migration ran — write path
   verified end-to-end against the live volume: persisted pick, no-JS 303,
-  JSON fragment response, HTTPS-origin and CSRF checks all correct). Left:
-  the manual browser pass at both viewports (§11), then `process-notes.md`,
-  `PROCESS.md`, and `reflections/crit-7.md`.
+  JSON fragment response, HTTPS-origin and CSRF checks all correct). The
+  §11 manual browser pass is now done too (2026-09-30, against production,
+  post-Stage-3 reseed, Firefox/Playwright at 1920×1080 and 390×844): all
+  four highlight states incl. contrast across all 4 course colours,
+  reduced-motion actually suppressing the transition (measured
+  `transitionDuration` 0s vs 0.2s), the clash `<dialog>` as a real modal
+  with JS and as a static `<dialog open>` without it (including confirming
+  a rejected clash leaves the original pick untouched), the three-region
+  vs. stacked layout, and SLOP2805 TutA's 18-session list actually
+  scrolling on both viewports — screenshots reviewed by eye, nothing
+  cramped or misaligned. Left: `process-notes.md`, `PROCESS.md`, and
+  `reflections/crit-7.md`.
 - Stage 3 done (2026-09-30): course-list layout fixes, activity-level
   selection, and the seed bump (SLOP2805 TutA now 18 sessions,
   `.session-list` max-height raised to 18rem) all landed, verified locally
