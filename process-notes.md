@@ -58,6 +58,27 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   leaves the original pick untouched. Stage 2.
   Commit: pending: Stage 2.
 
+- **Found the CI deploy pipeline still verifies a deleted feature.**
+  Reviewing `plan.md` against the repo's actual CI config (not just the
+  spec/), `.github/workflows/checks.yml`'s `deploy` job has a step that
+  curls `/api/events` and fails the job if it gets no bytes back — a
+  leftover check for the starter's SSE stream, which Stage 1 already
+  deleted (per-browser ownership means no client needs to hear about
+  another's pick). Obvious alternative: leave `checks.yml` alone, since
+  `CLAUDE.md` treats the CI workflow as one of the files that "says what it
+  fixes," i.e. something not ours to touch. Instead: it gets edited in
+  Stage 2d, because that verification step doesn't describe a fixed
+  requirement of the deploy pipeline — it describes a feature of the
+  starter that no longer exists in this app, and leaving it in would fail
+  every deploy once the repo goes public, directly costing half the
+  shipped mark (green CI checks) for a reason that has nothing to do with
+  whether the app actually works.
+  Evidence: `git log --oneline -- .github/workflows/checks.yml` is empty
+  (untouched since the initial commit) while `git log --diff-filter=D`
+  confirms `src/pages/api/events.ts` was deleted in `438123e`. Missing: the
+  fix itself and a deploy that shows the pipeline green without it.
+  Commit: pending: Stage 2d.
+
 - **Rejected the shared-timetable, two-page design.** The first shape
   considered mirrored the starter's guestbook: one timetable shared by every
   visitor, and a two-page split (grid + course-browse). Everyone opening the

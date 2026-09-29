@@ -1,39 +1,45 @@
 # Plan: a timetable I wish ANU had
 
-Scratch working document, not a submission artefact — captures the decisions
-before touching code, so they can be reviewed before any implementation
-starts. `PROCESS.md` will cite the commits that follow this, not this file
-itself.
+Scratch working document, not a submission artefact. It records decisions
+before code so I can review them.
 
-Revision 3: fixes the swap/clash ordering bug from review, models real
-variable-shaped activities (not a fixed set of four kinds), moves the grid to
-half-hour granularity, enforces one-pick-per-activity in the database itself,
-places the Remove control, handles long session lists, generates seed data
-from a deterministic function instead of hand-typing it, and de-prioritises
-the no-JS fallback relative to the JS partial-update path (the actual point
-of this prototype). Supersedes revision 2.
+I want to build a better ANU course-enrolment timetable page for this crit. Before writing any code, please produce a plan, write it to plan.md, and wait for my review before doing anything else.
 
-Revision 4: the seed generator now guarantees a clash-free full selection
-exists (by construction, not by search) alongside deliberately forced
-clashes, adds a re-runnable seeded-data summary command, fixes the
-undefined "click a grid block" behaviour from §4, records my view on
-server-rendered HTML fragments vs. JSON for the later JS path (not built
-yet), and closes the `session_id`/`activity_id` consistency gap on `picks`
-with a composite foreign key. Supersedes revision 3 in the sections below;
-everything not mentioned here is unchanged.
+**Basis**
+First read the C7 brief and spec (https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/07-anu-system/, plus the spec that ships with the starter and the spec/ directory in this repo). The whole project should be grounded in them.
 
-Revision 5: terminology cleanup only, no design changes. Build steps are
-now called **Stage 1, Stage 2, …** ("milestone" is reserved for the key
-moments recorded in `process-notes.md`, per `CLAUDE.md`'s process
-discipline — the two words meant different things and were being used
-interchangeably). Also added the Status line immediately below, so this
-file stands on its own if the conversation that produced it is gone.
+**The problem**
+In the current ANU enrolment page, the main area is my own timetable, and the course titles are listed in a left-hand navigation bar. To see all the available time slots for a course, I have to click its title in the left bar; clicking through from the timetable only shows the one slot I already chose. Once I click in, I only get a list of slots, so I can't see my timetable at the same time and can't compare options against it. Going back to the timetable makes the whole page reload.
 
-**Status: Stage 1 is approved and not yet started.** Nothing beyond
-`plan.md` itself has been built or committed for this feature yet. Stage 1
-is schema + migration + seed generator + the summary command only — see
-§12 for the exact scope and stop condition. Do not start UI, API routes, or
-pages: those are Stage 2+, not yet planned in detail and not approved.
+**What I want**
+Clicking a course shows its available slots as a list on the right side of the page, while the timetable stays in the main area. Clicking a slot in the list highlights the matching area on the timetable. No more going in and out of pages or reloading; each click only updates a small part of the page.
+
+
+**Status** (change after every stage is done)
+- Stage 1 is done and committed: schema, migration, seed generator, its
+  spec test, and `pnpm db:summary`. `pnpm check` is green (verified again
+  before Stage 2 planning: 4 test files, 29 tests, 0 typecheck errors).
+- The starter's messages/SSE/guestbook code is already deleted and
+  `index.astro` is a placeholder page.
+- **Stage 2 is now planned and approved — see §12.** Ordered as 2a
+  (server-rendered shell + ownership) → 2b (write path + clash logic +
+  `spec/timetable.test.ts` — the point where the spec's hard "persists
+  across a reload" requirement is actually met) → 2c (JS partial-update +
+  preview highlighting) → 2d (ship: fix the CI conflict below, deploy,
+  docs). Stop after 2b if time runs out; it's already spec-satisfying.
+- **Found reviewing the plan: `.github/workflows/checks.yml`'s `deploy` job
+  still has a step verifying `/api/events` streams — the starter's SSE
+  endpoint, deleted in Stage 1.** Untouched since the initial commit. Once
+  the repo goes public, this will fail every deploy even though the app
+  itself works. Fix is in Stage 2d: remove that verification step (the
+  other deploy checks — HTTPS origin, CSRF, site-online, link check — stay).
+- Also found: `src/pages/readme.astro`'s nav still says "Guestbook" instead
+  of "Timetable" (starter leftover). One-line fix, folded into 2a.
+- The new migration has not been run on the Fly volume yet — 2b is the
+  first safe point to deploy and check.
+- Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney). Prefer a deployed,
+  spec-satisfying version first; interaction polish comes after.
+
 
 ## 1. The slice
 
@@ -412,10 +418,9 @@ actually verified.
 Per `CLAUDE.md`: commits land incrementally, with a `process-notes.md`
 entry and a note to you at each milestone (a `process-notes.md` moment —
 not the same thing as a build stage; see the Status line above). Work is
-broken into stages; **Stage 1 is the only one approved to build, and the
-only one specified in detail here:**
+broken into stages; **Stage 1 and Stage 2 are both approved to build.**
 
-### Stage 1 (approved, not yet started)
+### Stage 1 (done — see the Status line above)
 
 - `src/lib/schema.ts` — the four tables, including the `unique
   (owner_id, activity_id)` constraint and the `sessions (id, activity_id)`
@@ -431,8 +436,46 @@ only one specified in detail here:**
   and prints the per-course/per-activity summary, plus the list of the 4
   gallery courses used for crediting.
 
-**No pages, no API routes, no UI in Stage 1.** Stop after Stage 1 and wait
-for review before planning or starting Stage 2 (the grid/panel skeleton).
+**No pages, no API routes, no UI in Stage 1.**
+
+### Stage 2 (approved — reviewed 2026-09-30, deadline day)
+
+Ordered so a deployable, spec-satisfying app exists as early as possible;
+each sub-stage ends with `pnpm check` green and is independently
+deployable. **Stop after 2b if time runs out** — the spec's hard
+requirement ("the core flow persists across a reload") is already met
+there; 2c is the interactive polish the crit demo shows off, not a spec
+requirement.
+
+- **2a — ownership + server-rendered shell, no API, no JS.**
+  `src/middleware.ts` (the `owner_id` cookie, §7); read helpers in
+  `src/lib/db.ts` (`listCourses`, `listActivitiesWithSessions`,
+  `listPicksForOwner`); `index.astro` rendering the real 3-region layout
+  (§4) from seeded data, course selection via `?course=<id>` plain links so
+  it works with JS off; the responsive CSS (both viewports) and the
+  scrollable long-session sub-list, since the 11-session `TutA` needs it to
+  be usable the first time it renders, not as later polish; fix
+  `readme.astro`'s leftover "Guestbook" nav label.
+- **2b — write path: Add/Remove/swap + clash logic (§6).** `POST
+  /api/picks` implementing §6's algorithm exactly (resolve activity → find
+  old pick → clash-check against every *other* pick, excluding the old one
+  → reject-nothing-written on clash, else transactional delete+insert); a
+  remove endpoint; the no-JS `<dialog open>` clash path (§6 step 6);
+  `spec/timetable.test.ts` (§10) written alongside, including the
+  swap-into-clash regression test for the bug already logged in
+  `process-notes.md`. First safe point to deploy and check the Fly volume.
+- **2c — JS partial-update layer + preview highlighting (§5/§8).**
+  Fetch-intercepted Add/Remove patching only the affected grid cell/panel
+  row, via server-rendered HTML fragments (§5 option (b) — one Astro
+  partial reused by the full page and the API's fragment response, so
+  there's exactly one implementation of "what a picked session looks
+  like"); the 409-clash path opening the same dialog via `.showModal()`;
+  the 4 preview/selected/clash highlight states (§8); the defined grid-click
+  navigation behaviour (§4).
+- **2d — ship.** Remove the stale SSE-verification step from
+  `.github/workflows/checks.yml` (Status line above); deploy; the manual
+  browser pass from §11 at both viewports; update `process-notes.md`,
+  `PROCESS.md`, and `reflections/crit-7.md`.
 
 ## 13. Open questions for review
 
