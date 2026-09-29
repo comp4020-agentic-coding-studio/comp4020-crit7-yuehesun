@@ -121,8 +121,10 @@ const COURSE_PLANS: CoursePlan[] = [
     color: "#BBF7D0",
     activities: [
       { code: "LecA", durationMinutes: 90, totalSessions: 1 },
-      // the long list: exercises the scrollable session sub-list (plan.md §4)
-      { code: "TutA", durationMinutes: 60, totalSessions: 11 },
+      // the long list: exercises the scrollable session sub-list (plan.md §4).
+      // Stage 3 gave each activity's panel much more room on its own, so this
+      // needed a bump to still visibly overflow that larger space.
+      { code: "TutA", durationMinutes: 60, totalSessions: 18 },
     ],
   },
   {

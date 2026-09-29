@@ -28,10 +28,13 @@ Clicking a course shows its available slots as a list on the right side of the p
   JSON fragment response, HTTPS-origin and CSRF checks all correct). Left:
   the manual browser pass at both viewports (§11), then `process-notes.md`,
   `PROCESS.md`, and `reflections/crit-7.md`.
-- Stage 3 approved, starting now (2026-09-30): Courses-column layout fixes
-  (swatch+code alignment, activity-code indent) and a switch from
-  course-level to activity-level selection, incl. a seed-data bump and an
-  authorised production reseed. See §12's Stage 3 for the breakdown.
+- Stage 3a/3b/3c done (2026-09-30): course-list layout fixes, activity-level
+  selection, and the seed bump (SLOP2805 TutA now 18 sessions,
+  `.session-list` max-height raised to 18rem) all landed and verified
+  locally (`pnpm check` green, Firefox/Playwright pass at 1920×1080 and
+  390×844 against a freshly reseeded local DB). Left: the authorised
+  production deploy + Fly volume reseed, then a live-site check. See §12's
+  Stage 3 for the breakdown.
 - Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
 
 

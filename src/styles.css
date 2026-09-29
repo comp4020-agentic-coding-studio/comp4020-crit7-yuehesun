@@ -198,12 +198,16 @@ a {
 }
 
 /* A fixed-height scroll region per activity, not the whole panel — so a
-   10+-session tutorial behaves the same on desktop and phone (plan.md §4). */
+   long tutorial list behaves the same on desktop and phone (plan.md §4).
+   Stage 3: the panel now shows one activity at a time, so it has much more
+   room than when several activities shared it — raised to use more of that
+   room, with SLOP2805 TutA's session count (src/lib/seed.ts) bumped to
+   match so the list still visibly needs its own scroll. */
 .session-list {
   list-style: none;
   margin: 0 0 1.25rem;
   padding: 0.25rem 0.5rem;
-  max-height: 10rem;
+  max-height: 18rem;
   overflow-y: auto;
   border: 1px solid #e5e7eb;
   border-radius: 0.375rem;
