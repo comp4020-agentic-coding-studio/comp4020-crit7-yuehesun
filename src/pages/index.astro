@@ -1,9 +1,30 @@
 ---
 import "../styles.css";
+import { gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwner } from "../lib/db";
+import { DAY_LABELS, formatMinutes } from "../lib/format";
 
-// Stage 1 landed the data layer only (schema, migration, seed generator,
-// `pnpm db:summary`) — see plan.md. This page is a placeholder until Stage 2
-// builds the real course list / session panel / week grid here.
+// Stage 2a: the real 3-region shell, server-rendered from the seeded data —
+// course list (left), week grid (main), session panel (right). Course
+// selection is a plain `?course=` link so the whole page works with no JS.
+// The write path (Add/Remove/clash) lands in Stage 2b; the JS
+// partial-update/preview layer in Stage 2c. See plan.md §4.
+const ownerId = Astro.locals.ownerId;
+
+const courses = listCourses();
+const requestedCourseId = Number(Astro.url.searchParams.get("course"));
+const selectedCourse = courses.find((c) => c.id === requestedCourseId) ?? courses[0];
+const activities = selectedCourse ? listActivitiesWithSessions(selectedCourse.id) : [];
+
+const picks = listPicksForOwner(ownerId);
+const pickedSessionByActivity = new Map(picks.map((p) => [p.activityId, p.sessionId]));
+
+const { startHour, endHour } = gridHourRange();
+const halfHourSlots = (endHour - startHour) * 2;
+const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
+
+function rowForMinutes(minutes: number): number {
+  return 2 + (minutes - startHour * 60) / 30;
+}
 ---
 
 <!doctype html>
@@ -20,11 +41,110 @@ import "../styles.css";
     </nav>
     <main>
       <h1>A timetable I wish ANU had</h1>
-      <p>
-        The course/activity/session/picks data model is seeded and ready
-        (<code>pnpm db:summary</code> shows what's in it). The course list,
-        session panel and week grid land in Stage 2.
-      </p>
+
+      <div class="layout">
+        <section class="course-list" aria-labelledby="courses-heading">
+          <h2 id="courses-heading">Courses</h2>
+          <ul>
+            {
+              courses.map((course) => (
+                <li>
+                  <a
+                    href={`/?course=${course.id}`}
+                    class="course-link"
+                    aria-current={course.id === selectedCourse?.id ? "page" : undefined}
+                  >
+                    <span class="swatch" style={`background: ${course.color}`} aria-hidden="true" />
+                    <span class="course-code">{course.code}</span>
+                    <span class="course-title">{course.title}</span>
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+
+        <section class="grid-wrap" aria-labelledby="grid-heading">
+          <h2 id="grid-heading">Your timetable</h2>
+          <div class="grid-scroll">
+            <div class="grid" style={`grid-template-rows: ${gridTemplateRows}`}>
+              {
+                DAY_LABELS.map((day, dayIndex) => (
+                  <div class="grid-day-header" style={`grid-column: ${dayIndex + 2}; grid-row: 1`}>
+                    {day}
+                  </div>
+                ))
+              }
+              {
+                Array.from({ length: endHour - startHour }).map((_, i) => (
+                  <div class="grid-hour-label" style={`grid-column: 1; grid-row: ${2 + i * 2} / span 2`}>
+                    {String(startHour + i).padStart(2, "0")}:00
+                  </div>
+                ))
+              }
+              {
+                DAY_LABELS.map((_, dayIndex) =>
+                  Array.from({ length: halfHourSlots }).map((_, slotIndex) => (
+                    <div class="grid-cell" style={`grid-column: ${dayIndex + 2}; grid-row: ${2 + slotIndex}`} />
+                  )),
+                )
+              }
+              {
+                picks.map((pick) => (
+                  <a
+                    class="grid-pick"
+                    href={`/?course=${pick.courseId}`}
+                    style={`grid-column: ${pick.day + 2}; grid-row: ${rowForMinutes(pick.startMinutes)} / span ${
+                      (pick.endMinutes - pick.startMinutes) / 30
+                    }; background: ${pick.courseColor}`}
+                  >
+                    {pick.courseCode} · {pick.activityCode}
+                  </a>
+                ))
+              }
+            </div>
+          </div>
+        </section>
+
+        <section class="session-panel" aria-labelledby="panel-heading">
+          {
+            selectedCourse ? (
+              <>
+                <h2 id="panel-heading">
+                  {selectedCourse.code} — {selectedCourse.title}
+                </h2>
+                {activities.map((activity) => {
+                  const pickedSessionId = pickedSessionByActivity.get(activity.id);
+                  return (
+                    <div class="activity">
+                      <h3>
+                        {activity.code}
+                        {pickedSessionId !== undefined && (
+                          <>
+                            {" "}
+                            <span aria-hidden="true">✓</span>
+                            <span class="sr-only">picked</span>
+                          </>
+                        )}
+                      </h3>
+                      <ul class="session-list">
+                        {activity.sessions.map((session) => (
+                          <li class={session.id === pickedSessionId ? "picked" : undefined}>
+                            {DAY_LABELS[session.day]} {formatMinutes(session.startMinutes)}–
+                            {formatMinutes(session.endMinutes)} · {session.location}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </>
+            ) : (
+              <p>No courses yet.</p>
+            )
+          }
+        </section>
+      </div>
     </main>
   </body>
 </html>

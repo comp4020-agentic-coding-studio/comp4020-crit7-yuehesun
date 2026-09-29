@@ -1,9 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
+import { asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { activities, courses, sessions } from "./schema.ts";
+import { activities, type Course, courses, picks, type Session, sessions } from "./schema.ts";
 import { generateSeed } from "./seed.ts";
 
 // One SQLite file is the app's whole persistent state. In production
@@ -70,4 +71,81 @@ function seedIfEmpty(): void {
         .run();
     }
   });
+}
+
+// --- Read queries for the page (Stage 2) ------------------------------
+
+export function listCourses(): Course[] {
+  return db.select().from(courses).orderBy(asc(courses.code)).all();
+}
+
+export interface ActivityWithSessions {
+  id: number;
+  code: string;
+  sessions: Session[];
+}
+
+export function listActivitiesWithSessions(courseId: number): ActivityWithSessions[] {
+  const rows = db.select().from(activities).where(eq(activities.courseId, courseId)).orderBy(asc(activities.code)).all();
+  return rows.map((activity) => ({
+    id: activity.id,
+    code: activity.code,
+    sessions: db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.activityId, activity.id))
+      .orderBy(asc(sessions.day), asc(sessions.startMinutes))
+      .all(),
+  }));
+}
+
+export interface PickWithDetails {
+  pickId: number;
+  activityId: number;
+  activityCode: string;
+  courseId: number;
+  courseCode: string;
+  courseColor: string;
+  sessionId: number;
+  day: number;
+  startMinutes: number;
+  endMinutes: number;
+  location: string;
+}
+
+// Every pick this owner currently has, joined enough to render both the
+// week grid (course colour, day/time) and the session panel's check marks
+// (activityId -> sessionId).
+export function listPicksForOwner(ownerId: string): PickWithDetails[] {
+  return db
+    .select({
+      pickId: picks.id,
+      activityId: picks.activityId,
+      activityCode: activities.code,
+      courseId: courses.id,
+      courseCode: courses.code,
+      courseColor: courses.color,
+      sessionId: sessions.id,
+      day: sessions.day,
+      startMinutes: sessions.startMinutes,
+      endMinutes: sessions.endMinutes,
+      location: sessions.location,
+    })
+    .from(picks)
+    .innerJoin(sessions, eq(picks.sessionId, sessions.id))
+    .innerJoin(activities, eq(picks.activityId, activities.id))
+    .innerJoin(courses, eq(activities.courseId, courses.id))
+    .where(eq(picks.ownerId, ownerId))
+    .all();
+}
+
+// The week grid's overall time range: earliest session start / latest
+// session end across ALL seeded sessions (not just what's picked or being
+// browsed), rounded outward to whole hours (plan.md §4) so the header row
+// can show whole-hour labels while half-hour sessions still land cleanly.
+export function gridHourRange(): { startHour: number; endHour: number } {
+  const rows = db.select({ startMinutes: sessions.startMinutes, endMinutes: sessions.endMinutes }).from(sessions).all();
+  const minStart = Math.min(...rows.map((r) => r.startMinutes));
+  const maxEnd = Math.max(...rows.map((r) => r.endMinutes));
+  return { startHour: Math.floor(minStart / 60), endHour: Math.ceil(maxEnd / 60) };
 }
