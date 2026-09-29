@@ -6,25 +6,125 @@
 // With JS disabled, the plain <form> POSTs and <a href> dismiss link this
 // progressively enhances still work: this file only intercepts events, it
 // never introduces a capability the no-JS path lacks.
+//
+// The preview split (approval addition #1: split whenever the overlap is
+// allowed, not only for a lecture candidate) imports the exact same
+// computeSlices/isDisallowedClash src/lib/db.ts uses for committed picks
+// (approval addition #3 — one shared implementation), so the ghost never
+// shows a layout the server would then render differently once committed.
+import { computeSlices, isDisallowedClash, timeOverlaps, type OverlapItem } from "../lib/overlap";
 
 const grid = document.getElementById("grid");
 const preview = document.getElementById("grid-preview") as HTMLElement | null;
 
+// Real (non-preview) grid picks currently rendered with inline slice styles
+// this hover has temporarily overridden — restored to their server-rendered
+// values in hidePreview. Only ever holds entries while a preview with a
+// multi-way split is showing.
+const splitRestore = new Map<HTMLElement, { width: string; marginLeft: string }>();
+
+function applySliceStyle(el: HTMLElement, sliceIndex: number, sliceCount: number) {
+  if (sliceCount > 1) {
+    el.style.width = `calc(100% / ${sliceCount})`;
+    el.style.marginLeft = `calc(100% / ${sliceCount} * ${sliceIndex})`;
+  } else {
+    el.style.width = "";
+    el.style.marginLeft = "";
+  }
+}
+
+function existingGridPicks(): HTMLElement[] {
+  return grid ? Array.from(grid.querySelectorAll<HTMLElement>(".grid-pick[data-activity-id]")) : [];
+}
+
 function showPreview(li: HTMLElement) {
   if (!preview) return;
-  const { day, row, span, color, kind, label } = li.dataset;
-  if (!day || !row || !span || !color) return;
+  const { day, row, span, color, kind, label, start, end } = li.dataset;
+  if (!day || !row || !span || !color || !start || !end) return;
   preview.style.gridColumn = String(Number(day) + 2);
   preview.style.gridRow = `${row} / span ${span}`;
   preview.style.backgroundColor = color;
   preview.classList.remove("kind-lecture", "kind-other");
   if (kind) preview.classList.add(kind);
   preview.textContent = label ?? "";
+  preview.style.width = "";
+  preview.style.marginLeft = "";
   preview.hidden = false;
+
+  // The panel <li> belongs to one activity (the wrapping .activity div, not
+  // the <li> itself); its own currently-committed pick (if any) is excluded
+  // below, exactly the way addOrSwapPick excludes the old pick before
+  // clash-checking — hovering an alternative session for an activity you've
+  // already picked shouldn't count as clashing with itself.
+  const ownActivityId = Number(li.closest(".activity")?.getAttribute("data-activity-id") ?? NaN);
+  const candidate: OverlapItem = {
+    id: Number.isFinite(ownActivityId) ? ownActivityId : -1,
+    day: Number(day),
+    startMinutes: Number(start),
+    endMinutes: Number(end),
+    isLecture: kind === "kind-lecture",
+  };
+
+  const others = existingGridPicks()
+    .filter((el) => Number(el.dataset.activityId) !== candidate.id)
+    .map((el) => ({
+      el,
+      item: {
+        id: Number(el.dataset.activityId),
+        day: Number(el.dataset.day),
+        startMinutes: Number(el.dataset.start),
+        endMinutes: Number(el.dataset.end),
+        isLecture: el.classList.contains("kind-lecture"),
+      } as OverlapItem,
+    }));
+
+  const disallowed = others.some(
+    ({ item }) =>
+      timeOverlaps(candidate, item) && isDisallowedClash({ isLecture: candidate.isLecture }, { isLecture: item.isLecture }),
+  );
+  if (disallowed) return; // plain, unsliced ghost — this add would be rejected
+
+  // Connected component containing the candidate, by mutual time overlap
+  // (BFS, same grouping computeSlices does internally). Existing picks are
+  // never mutually disallowed — addOrSwapPick guarantees that for anything
+  // already committed — so every reachable one is safe to include.
+  const componentEls: HTMLElement[] = [];
+  const componentItems: OverlapItem[] = [candidate];
+  const seen = new Set<HTMLElement>();
+  let frontier: OverlapItem[] = [candidate];
+  while (frontier.length > 0) {
+    const next: OverlapItem[] = [];
+    for (const { el, item } of others) {
+      if (seen.has(el)) continue;
+      if (frontier.some((f) => timeOverlaps(f, item))) {
+        seen.add(el);
+        componentEls.push(el);
+        componentItems.push(item);
+        next.push(item);
+      }
+    }
+    frontier = next;
+  }
+  if (componentEls.length === 0) return; // no overlap at all — plain full-width ghost
+
+  computeSlices(componentItems).forEach((s, i) => {
+    if (i === 0) {
+      applySliceStyle(preview, s.sliceIndex, s.sliceCount);
+      return;
+    }
+    const el = componentEls[i - 1];
+    if (!splitRestore.has(el)) splitRestore.set(el, { width: el.style.width, marginLeft: el.style.marginLeft });
+    applySliceStyle(el, s.sliceIndex, s.sliceCount);
+  });
 }
 
 function hidePreview() {
   if (preview) preview.hidden = true;
+  for (const [el, style] of splitRestore) {
+    el.style.width = style.width;
+    el.style.marginLeft = style.marginLeft;
+  }
+  splitRestore.clear();
 }
 
 function sessionLi(target: EventTarget | null): HTMLElement | null {
@@ -72,16 +172,27 @@ function firstElement(html: string): HTMLElement | null {
   return wrapper.firstElementChild as HTMLElement | null;
 }
 
-function applySuccess(data: { activityId: number; gridPickHtml: string | null; panelHtml: string | null }) {
+function applySuccess(data: {
+  activityId: number;
+  gridPicks: { activityId: number; html: string }[];
+  panelHtml: string | null;
+}) {
   // A touch-shown preview has no touchend/touchcancel-driven mouseout
   // equivalent (see the touchstart handler below), so a ghost left over from
   // the session the visitor just committed can otherwise survive the panel
   // swap that follows.
   hidePreview();
-  const old = findGridPick(data.activityId);
-  if (old) old.remove();
-  const replacement = data.gridPickHtml ? firstElement(data.gridPickHtml) : null;
-  if (replacement && grid) grid.insertBefore(replacement, preview);
+  // A write can reshuffle slice widths for picks other than the one just
+  // changed (e.g. adding a lecture that now overlaps an existing tutorial
+  // splits both), so the server sends back the owner's whole current pick
+  // set and every existing .grid-pick gets replaced wholesale, not patched.
+  if (grid) {
+    existingGridPicks().forEach((el) => el.remove());
+    for (const gp of data.gridPicks) {
+      const el = firstElement(gp.html);
+      if (el) grid.insertBefore(el, preview);
+    }
+  }
 
   const panel = document.querySelector(`.session-panel .activity[data-activity-id="${data.activityId}"]`);
   const panelReplacement = data.panelHtml ? firstElement(data.panelHtml) : null;
