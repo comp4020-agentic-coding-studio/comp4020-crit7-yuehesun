@@ -5,20 +5,23 @@ before touching code, so they can be reviewed before any implementation
 starts. `PROCESS.md` will cite the commits that follow this, not this file
 itself.
 
-Revision 2: single-page grid UI, choose-one-of-several-sessions modelling,
-per-browser ownership, server-checked clashes with a native `<dialog>`,
-responsive at both marking viewports, SSE dropped. Supersedes the two-page,
-shared-timetable version.
+Revision 3: fixes the swap/clash ordering bug from review, models real
+variable-shaped activities (not a fixed set of four kinds), moves the grid to
+half-hour granularity, enforces one-pick-per-activity in the database itself,
+places the Remove control, handles long session lists, generates seed data
+from a deterministic function instead of hand-typing it, and de-prioritises
+the no-JS fallback relative to the JS partial-update path (the actual point
+of this prototype). Supersedes revision 2.
 
 ## 1. The slice
 
 C7's brief: pick an ANU system that reliably ruins your week and build the
 full-stack replacement you wish existed. Chosen slice: **building a
 clash-free personal timetable from a small set of course offerings** —
-browse courses, see each one's alternative sessions (a lecture time, several
-possible tutorial times), preview a session against your existing picks,
-commit one session per activity, and get told immediately — before it's
-saved — if it collides with something you already have.
+browse courses, see each one's activities and their alternative sessions,
+preview a session against your existing picks, commit one session per
+activity, and get told immediately — before it's saved — if it collides
+with something you already have.
 
 End-to-end flow, all in SQLite: pick a course → preview a session (client
 side, no write) → Add → server validates against your existing picks →
@@ -38,93 +41,122 @@ courses
 activities
   id         int pk autoincrement
   course_id  int not null -> courses.id
-  kind       text not null          -- "Lecture" | "Tutorial" | "Lab" | "Seminar"
+  code       text not null          -- "LecA" | "LecB" | "TutA" | "ComA" | "Asm" — free text, not an enum
 
 sessions
   id            int pk autoincrement
   activity_id   int not null -> activities.id
   day           int not null        -- 0=Mon .. 4=Fri
-  start_minutes int not null        -- minutes since midnight; plain integer comparison for clashes
-  end_minutes   int not null
+  start_minutes int not null        -- multiple of 30; minutes since midnight
+  end_minutes   int not null        -- multiple of 30
   location      text not null       -- invented room
 
 picks
   id          int pk autoincrement
-  owner_id    text not null         -- from the anonymous per-browser cookie, see §5
+  owner_id    text not null         -- from the anonymous per-browser cookie, §7
   session_id  int not null -> sessions.id
+  activity_id int not null -> activities.id   -- denormalised, see below
   created_at  text not null default (datetime('now'))
+
+  unique (owner_id, activity_id)
 ```
 
-Changes from the first draft, and why:
+Changes from revision 2, and why:
 
-- **`activities` sits between courses and sessions.** This is the actual
-  shape of "choose one of several alternatives" — a course has a Lecture
-  activity (one session, take it or don't) and a Tutorial activity (several
-  candidate sessions, pick exactly one). Modelling this as its own table,
-  rather than a `kind` column on `sessions`, is what makes "only one session
-  per activity can be picked" an enforceable rule instead of a convention:
-  the app looks up *existing picks for this activity* before writing a new
-  one, and if found, replaces it (choosing a different tutorial time swaps
-  your pick, it doesn't add a second one) — a delete-then-insert in one
-  transaction, not a second unique constraint to maintain.
-- **`picks.owner_id`** replaces the single shared list from the first draft.
-  §5 covers why.
-- **Dropped `description`, `level`, `term` from `courses`.** None of them
-  are shown anywhere in this UI (no catalogue browsing, no filters, and all
-  four seeded courses share one term by design — see §3) — kept out per
-  "drop columns the UI doesn't use" rather than carried along as unused
-  provenance.
-- **Added `courses.color`.** The highlight design (§6) needs one fixed,
-  contrast-checked colour per course; hand-picking and storing it is more
-  predictable than deriving one at render time.
-- **`start_minutes`/`end_minutes` stay integers**, as in the first draft —
-  the clash check is `a.day = b.day AND a.start < b.end AND b.start < a.end`,
-  a plain comparison.
+- **`activities.code` replaces the fixed `kind` idea.** Real course
+  structures vary: some courses run two lecture streams that each need their
+  own pick (`LecA`, `LecB`), some use a computer lab instead of a tutorial
+  (`ComA`), some add an assignment-consultation slot (`Asm`). None of that
+  is a fixed set of kinds, so `code` is free text decided per-course by the
+  seed data (§3), not a column with a hardcoded set of allowed values. It
+  doubles as the short label shown in the UI (§4) — no separate long-form
+  label column, since nothing in this UI needs one.
+- **`picks.activity_id` is new, and denormalised on purpose.** The
+  "one session per activity per owner" rule now has a real database
+  constraint behind it (`unique (owner_id, activity_id)`), not just app-level
+  discipline — see §5 for exactly how a write stays consistent with it. This
+  is the fix for the swap-ordering bug flagged in review: the constraint
+  only means anything if `activity_id` lives on the row being constrained,
+  so it has to be written alongside `session_id`, not looked up separately
+  by a second query that could drift.
+- Everything else — `start_minutes`/`end_minutes` as integers for a plain
+  comparison clash check, no `description`/`level`/`term` on `courses`,
+  `owner_id` cookie-scoped ownership — carries over from revision 2
+  unchanged.
 
 ## 3. Seed data
 
 Per the standing decision in `README.md`: no real ANU data, course-level
-content reused from the fictional A2 gallery (`courses.slop.university`).
-Narrowed from the first draft's ~12–15 courses to **4 courses, all from the
-same term** — enough variety for two or three real, demonstrable clashes,
-without the browse-a-catalogue feel the two-page draft implied and this
-design no longer has.
+content reused from the fictional A2 gallery. **4 courses, one term**,
+unchanged from revision 2. What's new: **seeding is generated, not
+hand-typed.**
 
-- `courses`: 4 entries hand-copied from the gallery (code, title only —
-  description/level dropped, see §2), all tagged with the same term in the
-  seed script's comment (not a column, since nothing reads it back), each
-  given one hand-picked colour from a small accessible palette (§6).
-- `activities` + `sessions`: invented by me — each course gets a Lecture
-  (one session) and a Tutorial (2–3 alternative sessions). Times are chosen
-  deliberately so some Lecture/Tutorial combinations across the 4 courses
-  overlap and others don't, so both the clash path and the clean-add path
-  are demoable at the crit.
-- Seeding runs once at boot: `seedIfEmpty()` in `src/lib/db.ts`, called
-  after `migrate()`, inserting only if `courses` is empty — same mechanism
-  as the first draft, still no live fetch of the gallery site at runtime.
+`src/lib/seed.ts` exports a pure, deterministic function — fixed inputs in,
+identical rows out, every run (including CI's throwaway database and a
+fresh clone). Concretely:
+
+- The 4 courses (code, title, hand-picked colour) are a small literal array
+  — that part *is* hand-typed, since it's copied straight from the gallery
+  and there's nothing to generate.
+- Each course's **activity list is authored, not derived**: which
+  activities it has and how many alternative sessions each one gets is a
+  deliberate per-course choice, e.g. one course gets `LecA` (1 session) +
+  `TutA` (6 alternatives); another gets `LecA` + `LecB` (1 session each,
+  both compulsory picks) + `ComA` (4 alternatives); realistic tutorial-sized
+  activities get 5–6 sessions, at least one gets 10+ to actually exercise a
+  long list (§4). This variety is the point of §2's redesign, so it's
+  written by hand per course rather than randomised.
+- **Session times within each activity** are generated by a small seeded
+  PRNG (a fixed numeric seed, e.g. a plain 32-bit LCG/mulberry32 inline —
+  no new dependency), placing each session on a half-hour boundary within a
+  working window (09:00–18:00, Mon–Fri). Seeded, not `Math.random()`, so
+  the same rows come out every time.
+- A handful of specific slots are **deliberately forced to overlap** across
+  courses (e.g. two different courses each get a session at the same
+  day/time) — written explicitly, not left to chance, so the clash flow is
+  guaranteed demoable rather than hoping the PRNG happens to produce one.
+- `seedIfEmpty()` in `src/lib/db.ts` calls this generator once at boot,
+  after `migrate()`, only if `courses` is empty — same mechanism as before,
+  still no live fetch of the gallery site at runtime.
 
 ## 4. Page and layout — one page
 
 Everything lives at `/`. Three regions:
 
-- **Left — course list.** The 4 seeded courses, each a button showing its
-  colour swatch, code and title. Selecting one loads its activities into
-  the right panel.
-- **Right — session panel.** The selected course's activities, each as a
-  heading (with a check mark if it already has a pick) and its candidate
-  sessions listed under it. Each session row shows kind/time/location and
-  has its own **Add** button — an explicit, separate affordance from
-  preview, satisfying "preview doesn't save" without needing to track which
-  row was last hovered/focused as hidden state. *(Flagging this as my
-  reading of "an explicit Add saves it" — happy to change to one shared Add
-  button bound to the currently-previewed row if that's closer to what you
-  had in mind.)*
-- **Main — the week grid.** Day columns (Mon–Fri) × time rows, rows spanning
-  the actual earliest-start to latest-end across all seeded sessions
-  (computed, not hardcoded, so the grid doesn't carry dead space or clip a
-  future seed change). Committed picks render as solid blocks in their
-  course's colour, course code visible in the block. Previewing a session
-  (see §6) highlights its would-be cell without writing anything.
+- **Left — course list.** The 4 seeded courses, colour swatch + code +
+  title. Selecting one loads its activities into the right panel.
+- **Right — session panel.** The selected course's activities, each a
+  heading (its `code`, e.g. "TutA", with a check mark if it already has a
+  pick) and its candidate sessions listed under it, each row showing
+  time/location plus its own explicit **Add** button (kept from revision 2
+  — per-row, not one shared button). The row for whichever session is
+  *currently picked* for that activity shows a **Remove** button instead of
+  Add (this is where Remove lives — see below).
+  - **Long lists (10+ sessions):** each activity's own session list is a
+    fixed-height scroll region (`overflow-y: auto`, roughly 6 rows visible)
+    rather than letting it stretch the whole panel — the same rule on both
+    viewports, so a 10-session tutorial behaves identically on desktop and
+    phone instead of needing separate mobile logic. The panel's outer
+    container also caps its own height and scrolls independently of the
+    page/grid on desktop; on phone, where everything is stacked (below),
+    it's allowed to take the width it needs and the page scrolls normally —
+    only the *individual activity's* session list gets its own internal
+    scroll everywhere.
+- **Main — the week grid**, now with **half-hour granularity**: the header
+  row shows whole-hour labels only ("09:00", "10:00", …), but each hour
+  spans two internal half-hour row-tracks, so a session starting or ending
+  on the half-hour occupies exactly one of those tracks rather than
+  rounding to the nearest hour. The grid's overall time range is the
+  earliest session start and latest session end **rounded outward to whole
+  hours** (so a 09:30 start still gets a full "09:00" header and a visible
+  half-empty first hour, rather than an orphaned half-hour column). Rows
+  are computed from the seeded sessions, not hardcoded. Committed picks
+  render as solid blocks in their course's colour spanning their half-hour
+  tracks, course code + activity code visible in the block.
+  - **No Remove control on the grid itself** — clicking/tapping a block
+    only previews/inspects it (whatever §6 of the highlight design calls
+    for), so a stray tap while scanning the grid can't accidentally remove
+    a pick. Removal is a deliberate action taken in the panel, per above.
 
 `/readme/` is the only other route; `spec/routes.ts` stays `["/",
 "/readme/"]`.
@@ -134,160 +166,145 @@ Everything lives at `/`. Three regions:
 - **1920×1080**: three-column layout — course list, grid, session panel
   side by side, grid getting the most width.
 - **390×844**: stacked, single column — course list, then session panel,
-  then the grid. The grid itself (5 day columns) doesn't compress to
-  fit 390px legibly, so it sits in its own `overflow-x: auto` container and
-  scrolls horizontally, rather than shrinking text or columns to the point
-  of being unreadable. One layout, CSS media query switches the stacking —
-  no separate mobile template.
+  then the grid, in its own `overflow-x: auto` horizontal-scroll container
+  (5 day columns don't compress to phone width legibly).
 
-## 5. Interaction model and no-JS fallback
+## 5. Interaction model — priorities and no-JS fallback
 
-- **Preview** (hover, keyboard focus, or tap on a session row): pure CSS/JS,
-  no request — toggles a highlight class on the matching (currently empty)
-  grid cell. Reverts on blur/unhover/tap-away. No server involved.
-- **Add**: a real `<form method="post" action="/api/picks">` per session
-  row (`sessionId` hidden field) — works with no JS via a 303 redirect back
-  to `/`, full reload, grid/panel reflect the new state from a fresh
-  render. With JS, the same form's submit is intercepted, POSTed with
-  `fetch`, and the response patches only the grid cell and the panel's
-  check mark/Add-button state — no navigation. Progressive enhancement, not
-  two implementations of the write path: the fetch path and the plain POST
-  hit the identical route.
-- **Remove**: same pattern, a small "Remove" form per picked session,
-  posting to `/api/picks/:id/remove`.
+**The JS-driven partial update is the core idea of this prototype and gets
+built and polished first.** Preview (hover/focus/tap, §8) is JS-only by
+nature. Add/Remove/swap are real forms POSTing to `/api/picks*`, but the
+priority order is:
 
-## 6. Clash handling
+1. Get the `fetch`-intercepted submit path right: POST, read the JSON
+   response, patch only the affected grid cell(s) and the panel's
+   check-mark/Add-vs-Remove state — no navigation, no full re-render. This
+   is what the crit demo shows.
+2. The plain-POST, no-JS path (303 redirect back to `/`, full reload,
+   state reflects from a fresh server render) exists as a correctness net,
+   not a polished second UI — `spec/timetable.test.ts` (§10) exercises the
+   HTTP layer directly anyway, which is what actually keeps it honest. It
+   should *work*, but isn't where design or testing effort concentrates.
 
-Checked **only on the server**, at Add time — no client-side prediction,
-per the brief:
+## 6. Clash handling — including the swap fix
 
-1. `POST /api/picks` looks up the target session's activity. If that
-   activity already has a pick for this owner, it's the swap case (§2) —
-   delete the old pick, insert the new one, done, no clash check needed
-   against itself.
-2. Otherwise, query this owner's other picks joined to their sessions;
-   if any share `day` and overlap `[start_minutes, end_minutes)` with the
-   candidate, **reject**: nothing is written.
-3. On reject: no-JS path 303-redirects to `/?clash=<candidateSessionId>&with=<existingSessionId>`; the page reads those params server-side and renders a `<dialog open>` naming both sessions (course code, kind, time) — visible even with no JS, since `<dialog open>` is a real HTML attribute, just not a true modal without script. With JS, the same information comes back as JSON from the intercepted `fetch` (409 status), and the page calls `.showModal()` on the dialog instead of navigating, then clears any stale `?clash=` params via `history.replaceState`.
-4. While the dialog is open, the grid cell of the **existing** clashing
-   session gets the clash visual (warning icon + text, §7) so the dialog and
-   the grid agree on what collided; it clears when the dialog is dismissed.
+Checked **only on the server**, at Add time. Corrected ordering (this is
+the bug fix from review — checking now happens *before* any delete):
+
+1. `POST /api/picks` receives a target `sessionId`, looks up its
+   `activityId`.
+2. Look up whether this owner already has a pick for that `activityId` (the
+   "old" pick, if any — this is the swap case).
+3. **Clash-check the candidate session against all of this owner's *other*
+   picks, explicitly excluding the old pick found in step 2** (since it's
+   about to be replaced, it must never count as a clash against itself).
+   Overlap test: same `day`, and `start < otherEnd && otherStart < end`.
+4. If step 3 finds a clash: **reject — nothing is written**, old pick (if
+   any) stays exactly as it was. This is the fix: revision 2's ordering
+   would have deleted the old pick first and only then discovered a clash,
+   leaving the owner with neither the old pick nor the new one.
+5. If no clash: in one transaction, delete the old pick (if any) and insert
+   the new one (`session_id`, `activity_id`, `owner_id` together, satisfying
+   the `unique (owner_id, activity_id)` constraint from §2 by construction
+   rather than by catching a constraint violation).
+6. On reject: no-JS path 303-redirects to
+   `/?clash=<candidateSessionId>&with=<existingSessionId>`; the page reads
+   those server-side and renders a `<dialog open>` naming both sessions.
+   With JS (the priority path, §5), the same information comes back as
+   JSON (409 status) and the page calls `.showModal()` instead of
+   navigating.
+7. While the dialog is open, the grid cell of the **existing** clashing
+   session gets the clash visual (warning icon + text, §8) so the dialog
+   and the grid agree on what collided; it clears when the dialog is
+   dismissed.
 
 ## 7. Ownership: anonymous per-browser id
 
-A shared single timetable (the first draft's design) doesn't survive
-everyone opening the crit URL at once — picks would trample each other. Not
-worth real accounts for a crit prototype, so: `src/middleware.ts` reads an
-`owner_id` cookie on every request, generates one (`crypto.randomUUID()`) if
-absent, and sets it (`httpOnly`, `sameSite=lax`, a long `Max-Age`, no
-expiry-driven data loss mid-crit). Every query and write in `src/lib/db.ts`
-takes `ownerId` as a parameter — nothing reads or writes `picks` without it.
-No login, no visible identity, no name anywhere in the UI: purely a
-partition key so `pnpm test`'s runs, my browser, and your browser each get
-an independent, still-persistent timetable from the same seeded courses.
+Unchanged from revision 2: `src/middleware.ts` sets an `owner_id` cookie
+(generated with `crypto.randomUUID()` if absent) on every request —
+`httpOnly`, `sameSite=lax`, long-lived. Every query and write in
+`src/lib/db.ts` takes `ownerId` explicitly. No login, no visible identity —
+purely a partition key so simultaneous crit visitors don't trample each
+other's timetable.
 
 ## 8. Highlight design (visual states)
 
-Applies to a grid cell (a session's would-be or actual position):
+Unchanged from revision 2 — still the governing spec for grid-cell states:
 
-- **Unselected** (default): plain white, no effect.
-- **Preview** (hover / keyboard focus / tap on a session row): raised
-  shadow + thicker border + a semi-transparent fill in the course's colour.
-  Text stays dark, set explicitly rather than inherited, so it's readable
-  over the partial fill regardless of the course colour underneath.
-- **Selected** (a saved pick): solid fill in the course's own colour, no
-  thick border. The course code renders inside the block in dark text, so
-  colour is never the only cue distinguishing one course's block from
-  another's.
-- **Clash**: warning icon + text on the existing session's cell (§6 step 4),
-  alongside the dialog — never relying on fill alone, since a semi-transparent
-  preview can visually sit on top of an already-solid block and the two
-  would otherwise be indistinguishable.
-- **Colour palette**: 4 fixed, hand-picked light/pastel hex values (one per
-  seeded course, stored in `courses.color`), chosen so plain dark text
-  (`#1a1a1a` or similar) meets 4.5:1 contrast against the *solid* fill —
-  the binding constraint, since the preview's transparent version over
-  white background is always lighter still.
-- **Motion**: one short transition (~0.2s) on the state changes above,
-  wrapped in `@media (prefers-reduced-motion: no-preference)` so it's
-  skipped entirely under reduced-motion. No flashing, ever (including the
-  clash state — text + icon, not a blinking cell).
-- **Touch**: preview must work without hover — `:focus-visible` and a
-  `touchstart`/`click` listener toggle the same highlight class hover does,
-  so phones (no `:hover`) get the same preview behaviour via tap.
+- **Unselected**: plain white, no effect.
+- **Preview** (hover / keyboard focus / tap): raised shadow + thicker
+  border + semi-transparent fill in the course's colour; text stays dark,
+  set explicitly, readable over any course's partial fill.
+- **Selected**: solid fill in the course's own colour, no thick border,
+  course code (now: code + activity code, e.g. "SLOP4225 · TutA") visible
+  inside the block.
+- **Clash**: warning icon + text on the existing session's cell, alongside
+  the dialog — never fill alone.
+- **Palette**: 4 fixed, hand-picked light/pastel hex values, one per
+  course, chosen so dark text meets 4.5:1 against the *solid* fill (the
+  binding case).
+- **Motion**: one ~0.2s transition, wrapped in
+  `prefers-reduced-motion: no-preference`; no flashing anywhere, including
+  the clash state.
+- **Touch**: the same highlight class toggles on `touchstart`/`click` as on
+  hover/`:focus-visible`, so phones without `:hover` still get preview.
 
-## 9. What's dropped from the first draft
+## 9. What's dropped
 
-- **SSE.** With per-browser ownership (§7), there's no other client to
-  broadcast to — each browser only ever sees its own picks. `src/lib/events.ts`
-  and `src/pages/api/events.ts` are deleted, not left unused.
-  `spec/guestbook.test.ts`'s SSE-broadcast assertion goes with them.
-- **The two-page split** (`/` timetable + `/courses/` browse) — merged into
-  the single grid+panels page in §4.
-- **`courses.description`, `.level`, `.term`** — see §2.
-- **Capacity/quota/waitlisting, accounts, prerequisite checking** — still
-  out of scope, as in the first draft, for the same reason: not what this
-  slice is about.
+Unchanged from revision 2: SSE (`src/lib/events.ts`,
+`src/pages/api/events.ts`, and `spec/guestbook.test.ts`'s broadcast
+assertion all deleted — per-browser ownership means no other client needs
+to hear about a pick); the two-page split; `courses.description/level/term`;
+accounts, capacity/quota/waitlisting, prerequisite checking.
 
 ## 10. Spec tests
 
-- Delete `spec/guestbook.test.ts` (messages flow and SSE both gone).
-- Add `spec/timetable.test.ts`, covering what's mechanically checkable:
-  - a pick **persists across a reload** for the same `owner_id` cookie —
-    the spec's explicit "create something, and it's still there."
-  - **two different cookies** (two `fetch` calls with separate `Cookie`
-    jars) get independent picks — proves ownership isolation actually
-    works, not just that a cookie gets set.
-  - picking a second session in the **same activity replaces** the first
-    (only one pick for that activity afterward).
-  - a **genuinely overlapping** add is rejected: the pick count doesn't
-    change, and the response identifies the clashing session (redirect
-    query params for the no-JS path, JSON body for the `fetch` path).
+- Delete `spec/guestbook.test.ts`.
+- Add `spec/timetable.test.ts`:
+  - a pick **persists across a reload** for the same `owner_id` cookie.
+  - **two different cookies** get independent picks (ownership isolation).
+  - picking a second session in the **same activity replaces** the first —
+    and, specifically, **replacing into a session that clashes with a
+    different pick is rejected, leaving the original pick in that activity
+    untouched** (the exact bug fixed in §6 step 4 — this test is the
+    regression check for it).
+  - a **genuinely overlapping** add (not a same-activity swap) is rejected,
+    pick count unchanged, response identifies the clashing session.
   - a **non-overlapping** add from a different course succeeds.
-- `spec/invariants.test.ts` and `spec/readme.test.ts` untouched.
-  `spec/routes.ts` stays as-is (`/`, `/readme/`) since `/courses/` no longer
-  exists.
+  - the database itself refuses a second row for the same
+    `(owner_id, activity_id)` — a direct test of the `unique` constraint
+    from §2, independent of the application logic that's supposed to avoid
+    triggering it.
+- `spec/invariants.test.ts` and `spec/readme.test.ts` untouched;
+  `spec/routes.ts` stays `["/", "/readme/"]`.
 
 ## 11. Verifying what tests can't: human judgement, in a real browser
 
-Automated checks cover persistence, ownership isolation, and clash
-rejection at the HTTP level — they can't see a highlight, a modal, or a
-layout. Before calling this done, check by hand (agent-browser or manual)
-against the **built** app, at both marking viewports:
-
-- **Highlight states**: preview (hover *and* keyboard-tab *and* tap/touch
-  emulation), selected, and clash cells actually look like §8 describes —
-  in particular that dark text stays legible over every one of the 4
-  course colours in both the preview (transparent) and selected (solid)
-  states, and that reduced-motion actually suppresses the transition
-  (toggle the OS/browser setting or `prefers-reduced-motion` in devtools).
-- **The clash `<dialog>`**: opens as a real modal with JS (focus moves in,
-  `Esc` or a close control dismisses it, page underneath is inert while
-  open), and separately, with JS disabled, that the no-JS path still shows
-  the clash information via the redirect + `<dialog open>` render (not a
-  blank or broken page).
-- **Layout at 1920×1080 and 390×844**: the three-region layout side-by-side
-  at desktop width, correctly stacked in course-list → panel → grid order
-  at phone width, and the grid's horizontal scroll container actually
-  scrolls rather than overflowing the page.
-- Since `axe`'s `color-contrast` rule is disabled in
-  `spec/invariants.test.ts` (jsdom can't compute rendered colour), the
-  contrast check above is the only place contrast actually gets verified —
-  worth a screenshot in `PROCESS.md`/`docs/` either way.
+Unchanged in substance from revision 2 — checked by hand against the built
+app at both marking viewports: the four highlight states (incl. contrast
+across all 4 course colours, reduced-motion actually suppressing the
+transition), the clash `<dialog>` as a real modal with JS and as a visible
+`<dialog open>` without it, the three-region layout at 1920×1080 vs. the
+stacked layout at 390×844, and — new in this revision — that a 10+-session
+activity's scrollable sub-list actually scrolls instead of overflowing, on
+both viewports. Since `axe`'s `color-contrast` rule is disabled in
+`spec/invariants.test.ts`, the contrast check here is the only place it's
+actually verified.
 
 ## 12. Process
 
-Per `CLAUDE.md`: commits land incrementally as each piece goes green
-(schema + migration + seed → grid/panel skeleton → preview interaction →
-add/remove + clash check → cookie ownership → highlight/dialog polish →
-spec tests → manual verification pass → README/PROCESS updates), with a
-`process-notes.md` entry and a note to you at each milestone.
+Per `CLAUDE.md`: commits land incrementally, with a `process-notes.md`
+entry and a note to you at each milestone. **First milestone, and the only
+one to build before the next review: schema + migration + seed generator +
+a readable console/log summary of what was seeded** (per course: its
+activities, each activity's session count, and its time range) — no pages,
+no API routes, no UI yet. Stop there and wait for review before continuing
+to the grid/panel skeleton.
 
 ## 13. Open questions for review
 
-- **Add button scope** (§4): one Add button per session row (my current
-  read), vs. one shared Add button acting on whichever row is currently
-  previewed.
-- Exact 4 courses and their colours — will pick once the layout direction
-  above is confirmed, so the palette can be chosen alongside it rather than
-  redone after.
+- None blocking — revision 2's open question on Add-button scope is
+  resolved (per-row, kept). Remaining judgement calls (exact 4 courses, the
+  per-course colour palette, the specific per-course activity shapes and
+  which slots are forced to clash) will be made concretely inside the
+  seed generator at milestone 1, where they're easiest to see and adjust.
