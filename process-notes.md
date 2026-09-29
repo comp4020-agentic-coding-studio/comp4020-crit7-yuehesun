@@ -26,12 +26,10 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   ANU data or personal information anywhere in the seed data, since the repo
   and the running app go public at the cutoff — reused the fictional A2
   gallery courses instead.
-  Evidence: none yet — documented in `README.md`, but documentation isn't a
-  rule, a check, or a deletion, so it isn't backing on its own. Missing: a
-  test asserting seed course codes match the gallery's `SLOP####` pattern
-  rather than a real ANU code, so a future edit can't silently reintroduce
-  one. Stage 2.
-  Commit: pending: Stage 2.
+  Evidence: documented in `README.md`. Missing: a test asserting seed course
+  codes match the gallery's `SLOP####` pattern rather than a real ANU code,
+  so a future edit can't silently reintroduce one. Stage 2.
+  Commit: [`93dfd7c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/93dfd7c) (README.md).
 
 - **Guaranteed a clash-free timetable exists.** Session times come from a
   seeded PRNG, so a naive generator could hand every visitor an unwinnable
