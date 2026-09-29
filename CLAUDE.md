@@ -14,6 +14,41 @@ what the agent needs to carry from any of it is your call.
 
 - Commit incrementally, and tell me after each commit — no batching.
 
+## Workflow
+
+- **Plan first.** At the start of each Crit/Assignment, the user gives a
+  rough idea first, then the agent generates `plan.md`: a full outline plus
+  a first-draft plan for every stage. Stage boundaries are the agent's own
+  call — split where the work naturally breaks and the size feels right —
+  and can be adjusted later. There is one `plan.md` file for the whole
+  project, continuously iterated from there — never rewritten from scratch.
+- The top of `plan.md` must always have: instructions to read the relevant
+  brief and spec, the project background (what we're building and the
+  user's vision), and the current state — so `@plan` alone lets a new
+  conversation quickly understand the situation.
+- Before starting a stage, refine that stage's own plan section against the
+  real situation (not the whole outline).
+- Verify each stage by hand: write the code, stop, show the user something
+  they can check themselves, and wait for feedback. If something's wrong,
+  don't edit yet — analyse the code and the user's description until you find
+  the actual fault, present the diagnosis, and wait for the user to agree
+  before editing. Then edit, verify again, and repeat until the user is
+  satisfied.
+- Finishing a stage means updating its state in `plan.md` and folding that
+  update into the stage's last code commit — report it like any commit — then
+  waiting for the user to `/clear`. That commit is what guarantees progress
+  survives the `/clear`.
+- A new conversation starts with `@plan`: read the brief/spec, the
+  background, and the real codebase, and confirm the claimed state is
+  actually done. If the state says "in progress," skip replanning and resume
+  the unfinished work described there. If the stage is done, refine the next
+  stage's plan and wait for approval before writing code.
+- Small bug fixes don't need a `plan.md` change — only new features or new
+  stages do. If a fix grows into something that changes the overall design,
+  don't make that a special process — just note it in the plan or the state
+  once it lands, so the next session knows.
+- Run `pnpm check` and make it green before showing the user anything.
+
 ## Process
 
 - Read the `PROCESS.md` template in this repo and the [Assessment
