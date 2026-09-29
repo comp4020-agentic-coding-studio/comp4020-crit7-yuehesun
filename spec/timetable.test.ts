@@ -177,28 +177,28 @@ describe("timetable: add/swap/remove over HTTP", () => {
     expect(isPicked(await pageHtml(jar, "SLOP2805", "TutA"), second)).toBe(false);
   });
 
-  it("allows a lecture and a non-lecture activity to overlap (lecture-permissive rule)", async () => {
+  it("allows two different courses' lectures to overlap (lecture-permissive rule)", async () => {
     // ANU lectures aren't attendance- or mark-checked, so overlapping a
     // lecture with anything is allowed — only non-lecture vs non-lecture is
     // a genuine clash (src/lib/overlap.ts's isDisallowedClash). seed.ts's
-    // FORCED_OVERLAPS plants this pair deliberately so it's not left to
+    // FORCED_OVERLAPS pins this pair deliberately (two different courses'
+    // lecture baselines, since a lecture activity has exactly one session
+    // — schema.ts's sessions_lecture_activity_unique) so it's not left to
     // whatever the PRNG happens to generate.
     const jar = makeJar();
-    const lecture = findSession("SLOP4225", "LecA", false, 0); // forced-overlap side a
-    const tutorial = findSession("SLOP4225", "TutA", false, 1); // forced-overlap side b
+    const lectureA = findSession("SLOP4225", "LecA", true); // forced-overlap side a
+    const lectureB = findSession("SLOP1836", "LecA", true); // forced-overlap side b
 
-    const lectureRes = await addPick(jar, lecture, "SLOP4225");
-    expect(lectureRes.status).toBe(303);
-    expect(lectureRes.headers.get("location")).not.toContain("clash=");
+    const resA = await addPick(jar, lectureA, "SLOP4225");
+    expect(resA.status).toBe(303);
+    expect(resA.headers.get("location")).not.toContain("clash=");
 
-    const tutorialRes = await addPick(jar, tutorial, "SLOP4225");
-    expect(tutorialRes.status).toBe(303);
-    expect(tutorialRes.headers.get("location")).not.toContain("clash=");
+    const resB = await addPick(jar, lectureB, "SLOP1836");
+    expect(resB.status).toBe(303);
+    expect(resB.headers.get("location")).not.toContain("clash=");
 
-    // Stage 3: the two activities no longer share one panel render, so each
-    // needs its own fetch to check its picked session.
-    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), lecture)).toBe(true);
-    expect(isPicked(await pageHtml(jar, "SLOP4225", "TutA"), tutorial)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), lectureA)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP1836", "LecA"), lectureB)).toBe(true);
   });
 
   it("adds a non-overlapping session from a different course alongside an existing pick", async () => {
@@ -251,7 +251,7 @@ describe("database constraints (isolated fixture, no HTTP)", () => {
       .get();
     const sessionA = db
       .insert(sessions)
-      .values({ activityId: activityA.id, day: 0, startMinutes: 540, endMinutes: 600, location: "R" })
+      .values({ activityId: activityA.id, activityCode: "A", day: 0, startMinutes: 540, endMinutes: 600, location: "R" })
       .returning({ id: sessions.id })
       .get();
 
@@ -293,5 +293,44 @@ describe("database constraints (isolated fixture, no HTTP)", () => {
     // "A"/"B" in freshFixture() are already non-lecture codes in courseId —
     // a third non-lecture row with the same code is unrestricted.
     expect(() => db.insert(activities).values({ courseId, code: "A" }).run()).not.toThrow();
+  });
+
+  it("refuses a second session for a lecture-code activity", () => {
+    // schema.ts's sessions_lecture_activity_unique: a lecture activity is
+    // one fixed time — a student can't be in two places at once. Two
+    // lecture streams are two activities (LecA, LecB), not two sessions on
+    // one, so this is scoped to code LIKE 'Lec%' only.
+    const { db, courseId } = freshFixture();
+    const lecture = db.insert(activities).values({ courseId, code: "LecA" }).returning({ id: activities.id }).get();
+    db.insert(sessions).values({ activityId: lecture.id, activityCode: "LecA", day: 0, startMinutes: 540, endMinutes: 630, location: "R" }).run();
+    expect(() =>
+      db
+        .insert(sessions)
+        .values({ activityId: lecture.id, activityCode: "LecA", day: 1, startMinutes: 540, endMinutes: 630, location: "R2" })
+        .run(),
+    ).toThrow();
+  });
+
+  it("allows multiple sessions for a non-lecture activity", () => {
+    const { db, activityAId } = freshFixture();
+    // freshFixture() already inserted one session for activityA (code "A",
+    // non-lecture) — a second is exactly the "pick your alternative" case
+    // tutorials/labs need, so it must stay unrestricted.
+    expect(() =>
+      db
+        .insert(sessions)
+        .values({ activityId: activityAId, activityCode: "A", day: 1, startMinutes: 540, endMinutes: 600, location: "R2" })
+        .run(),
+    ).not.toThrow();
+  });
+
+  it("refuses a session whose activity_code doesn't match its activity_id's real code", () => {
+    const { db, activityAId } = freshFixture();
+    expect(() =>
+      db
+        .insert(sessions)
+        .values({ activityId: activityAId, activityCode: "LecA", day: 1, startMinutes: 540, endMinutes: 600, location: "R2" })
+        .run(),
+    ).toThrow();
   });
 });

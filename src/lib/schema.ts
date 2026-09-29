@@ -40,6 +40,9 @@ export const activities = sqliteTable(
     uniqueIndex("activities_course_lecture_code_unique")
       .on(table.courseId, table.code)
       .where(sql`${table.code} like 'Lec%'`),
+    // Lets `sessions` address the (id, code) pair below — free, since `id`
+    // is already unique on its own.
+    unique().on(table.id, table.code),
   ],
 );
 
@@ -50,6 +53,15 @@ export const sessions = sqliteTable(
     activityId: int("activity_id")
       .notNull()
       .references(() => activities.id),
+    // Denormalised copy of the parent activity's code, kept honest by the
+    // composite FK below (same trick as picks.activityId further down) —
+    // it exists so the partial unique index below can see "is this session
+    // a lecture's" without a cross-table lookup, which SQLite indexes can't
+    // do. A student can't be in two places at once, so a lecture activity
+    // (code LIKE 'Lec%') may have only one session; if a course needs two
+    // lecture streams they're two activities (LecA and LecB), not two
+    // sessions on one — see COURSE_PLANS in src/lib/seed.ts.
+    activityCode: text("activity_code").notNull(),
     day: int().notNull(), // 0=Mon .. 4=Fri
     startMinutes: int("start_minutes").notNull(), // multiple of 30; minutes since midnight
     endMinutes: int("end_minutes").notNull(), // multiple of 30
@@ -59,6 +71,21 @@ export const sessions = sqliteTable(
     // Lets `picks` address the (id, activityId) pair below — free, since
     // `id` is already unique on its own.
     unique().on(table.id, table.activityId),
+    // Keeps activityCode honest: a given activityId only ever pairs with
+    // its own real code here, so SQLite rejects a mismatched pair at
+    // insert time rather than trusting the application to keep them in
+    // sync (same pattern as the picks FK below).
+    foreignKey({
+      columns: [table.activityId, table.activityCode],
+      foreignColumns: [activities.id, activities.code],
+    }),
+    // At most one session per lecture activity (see activityCode above) —
+    // non-lecture activities (TutA, ComA, ...) are unrestricted, since
+    // offering several alternative sessions to choose from is exactly the
+    // point for those.
+    uniqueIndex("sessions_lecture_activity_unique")
+      .on(table.activityId)
+      .where(sql`${table.activityCode} like 'Lec%'`),
   ],
 );
 

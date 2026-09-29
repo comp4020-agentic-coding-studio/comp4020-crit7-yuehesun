@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isLecture } from "../src/lib/activity-kind";
+import { isDisallowedClash } from "../src/lib/overlap";
 import { generateSeed } from "../src/lib/seed";
 
 // A pure-function unit test of the generator itself — no HTTP calls, no
@@ -16,18 +17,19 @@ describe("seed generator", () => {
     }
   });
 
-  it("the constructed baseline is mutually non-overlapping", () => {
+  it("the constructed baseline never has a disallowed (non-lecture vs non-lecture) overlap", () => {
     // The clash-free full-selection guarantee from plan.md §2/§10, checked
-    // directly against the known baseline set — not searched for. Still the
-    // right guarantee under the lecture-permissive overlap rule
-    // (src/lib/overlap.ts): full mutual non-overlap is *stricter* than the
-    // rule requires (which only forbids non-lecture/non-lecture overlap), so
-    // a baseline built this way trivially satisfies it too.
+    // directly against the known baseline set — not searched for. Baselines
+    // are otherwise mutually non-overlapping by construction (placeBaseline),
+    // except FORCED_OVERLAPS' one deliberate pinned pair of cross-course
+    // lecture baselines — which is fine, since a lecture/lecture overlap is
+    // allowed, not a genuine clash (src/lib/overlap.ts's isDisallowedClash).
     for (const a of seed.baselineSessions) {
       for (const b of seed.baselineSessions) {
         if (a === b || a.day !== b.day) continue;
         const overlaps = a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes;
-        expect(overlaps).toBe(false);
+        if (!overlaps) continue;
+        expect(isDisallowedClash({ isLecture: isLecture(a.activityCode) }, { isLecture: isLecture(b.activityCode) })).toBe(false);
       }
     }
   });
@@ -48,15 +50,34 @@ describe("seed generator", () => {
     }
   });
 
-  it("every deliberately forced overlap pair actually overlaps and includes a lecture", () => {
+  it("every deliberately forced overlap pair actually overlaps, involves a lecture, and spans two different courses", () => {
     // The allowed-overlap counterpart: at least one side must be a lecture,
-    // or this fixture wouldn't demonstrate the rule it exists to test.
+    // or this fixture wouldn't demonstrate the rule it exists to test. Both
+    // sides must be different courses — a course's own two lecture streams
+    // (LecA/LecB) must never be forced to overlap each other, since a
+    // student genuinely needs to attend both.
     expect(seed.forcedOverlapPairs.length).toBeGreaterThan(0);
     for (const [a, b] of seed.forcedOverlapPairs) {
       expect(a.day).toBe(b.day);
       const overlaps = a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes;
       expect(overlaps).toBe(true);
       expect(isLecture(a.activityCode) || isLecture(b.activityCode)).toBe(true);
+      expect(a.courseCode).not.toBe(b.courseCode);
+    }
+  });
+
+  it("no lecture activity has more than one session", () => {
+    // schema.ts's sessions_lecture_activity_unique: a lecture is one fixed
+    // time, full stop — a course that needs two lecture streams models them
+    // as two activities (LecA, LecB), not one activity with two sessions.
+    const countsByActivity = new Map<string, number>();
+    for (const session of seed.sessions) {
+      const key = `${session.courseCode}|${session.activityCode}`;
+      countsByActivity.set(key, (countsByActivity.get(key) ?? 0) + 1);
+    }
+    for (const [key, count] of countsByActivity) {
+      const activityCode = key.split("|")[1];
+      if (isLecture(activityCode)) expect(count).toBe(1);
     }
   });
 

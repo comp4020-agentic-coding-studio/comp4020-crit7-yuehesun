@@ -56,11 +56,26 @@ Clicking a course shows its available slots as a list on the right side of the p
   LecB, ...) — scoped to `code LIKE 'Lec%'` only, via `isLecture`'s existing
   convention, so non-lecture codes (TutA, ComA, ...) are unrestricted.
   Migration `drizzle/0001_puzzling_goblin_queen.sql`; guarded by two new
-  tests in `spec/timetable.test.ts`'s "database constraints" block. Not yet
-  deployed to Fly. (Seed data itself was never wrong here — SLOP4225's LecA
-  is one activity with two *sessions* that happen to coincide in time, not
-  two LecA activity rows; this constraint guards against the latter, which
-  is a real but so-far-unhit bug shape.)
+  tests in `spec/timetable.test.ts`'s "database constraints" block.
+- Follow-up correction (2026-09-30): the seed data actually *was* wrong —
+  SLOP4225's LecA had two sessions, which is nonsensical (a lecture is one
+  fixed time; a student can't attend two). Added a second partial unique
+  index, `sessions_lecture_activity_unique` (`sessions.activityId`, scoped
+  to `activityCode LIKE 'Lec%'` via a denormalised `sessions.activityCode`
+  column kept honest by a composite FK to `activities(id, code)`), so a
+  lecture activity can have at most one session ever; two lecture streams
+  must be two activities (LecA, LecB) with non-overlapping times, never one
+  activity with two sessions. Seed's `FORCED_OVERLAPS` restructured to match:
+  the one deliberate lecture-overlap demo is now a pinned baseline clash
+  between two *different* courses (SLOP4225 LecA × SLOP1836 LecA), never
+  within one course. Migration `drizzle/0002_messy_storm.sql` (two real
+  migration bugs caught and fixed while writing it: a backfill SELECT
+  referencing a not-yet-existent column, and a dependent index ordered
+  after the table whose FK needed it — the latter only surfaces because
+  drizzle wraps the whole migration run in one transaction, which makes
+  `PRAGMA foreign_keys=OFF` a no-op per SQLite's documented behaviour, so
+  FK enforcement stays live throughout). Guarded by new tests in both
+  `spec/seed.test.ts` and `spec/timetable.test.ts`. Not yet deployed to Fly.
 - Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
 
 

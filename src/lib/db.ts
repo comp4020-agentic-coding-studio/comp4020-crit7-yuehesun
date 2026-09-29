@@ -65,6 +65,7 @@ function seedIfEmpty(): void {
       tx.insert(sessions)
         .values({
           activityId,
+          activityCode: session.activityCode,
           day: session.day,
           startMinutes: session.startMinutes,
           endMinutes: session.endMinutes,
