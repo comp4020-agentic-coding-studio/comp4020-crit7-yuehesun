@@ -16,29 +16,17 @@ Clicking a course shows its available slots as a list on the right side of the p
 
 
 **Status** (change after every stage is done)
-- Stage 1 is done and committed: schema, migration, seed generator, its
-  spec test, and `pnpm db:summary`. `pnpm check` is green (verified again
-  before Stage 2 planning: 4 test files, 29 tests, 0 typecheck errors).
-- The starter's messages/SSE/guestbook code is already deleted and
-  `index.astro` is a placeholder page.
-- **Stage 2 is now planned and approved — see §12.** Ordered as 2a
-  (server-rendered shell + ownership) → 2b (write path + clash logic +
-  `spec/timetable.test.ts` — the point where the spec's hard "persists
-  across a reload" requirement is actually met) → 2c (JS partial-update +
-  preview highlighting) → 2d (ship: fix the CI conflict below, deploy,
-  docs). Stop after 2b if time runs out; it's already spec-satisfying.
-- **Found reviewing the plan: `.github/workflows/checks.yml`'s `deploy` job
-  still has a step verifying `/api/events` streams — the starter's SSE
-  endpoint, deleted in Stage 1.** Untouched since the initial commit. Once
-  the repo goes public, this will fail every deploy even though the app
-  itself works. Fix is in Stage 2d: remove that verification step (the
-  other deploy checks — HTTPS origin, CSRF, site-online, link check — stay).
-- Also found: `src/pages/readme.astro`'s nav still says "Guestbook" instead
-  of "Timetable" (starter leftover). One-line fix, folded into 2a.
-- The new migration has not been run on the Fly volume yet — 2b is the
-  first safe point to deploy and check.
-- Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney). Prefer a deployed,
-  spec-satisfying version first; interaction polish comes after.
+- Stage 1 done: schema, migration, seed generator, its spec test,
+  `pnpm db:summary`.
+- Stage 2a–2c done: ownership cookie, server-rendered shell, write/clash
+  API, JS partial-update + preview layer, and the lecture-permissive
+  overlap rule (shared `computeSlices`/`isDisallowedClash`). `pnpm check`
+  green: 6 test files, 54 tests, 0 typecheck errors.
+- Stage 2d remaining: remove `checks.yml`'s stale `/api/events`
+  deploy-verification step (starter SSE leftover), deploy to Fly (migration
+  hasn't run against the volume yet), a manual browser pass, then
+  `PROCESS.md`/`reflections/`.
+- Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
 
 
 ## 1. The slice
