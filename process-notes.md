@@ -210,3 +210,37 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   [`db4be08`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/db4be08),
   [`83a575f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/83a575f)
   (the rule change itself, built across these small commits).
+
+- **Wrote the cross-`/clear` workflow into `CLAUDE.md` instead of leaving it
+  as tacit habit.** `plan.md` already had a "Status" block, and this session
+  was already committing in small steps and pausing to test by hand — but
+  none of that was written down as a rule a *future* session would inherit.
+  It existed only as whatever the current session happened to remember to
+  do, so how carefully a fresh session after `/clear` re-verified state,
+  refined the next stage's plan, or resisted editing before diagnosing a
+  reported problem depended entirely on that session's own judgment, not on
+  anything `@plan` or `CLAUDE.md` told it to do. Obvious alternative: keep
+  relying on that tacit habit — it had been working, and `CLAUDE.md` already
+  says commits should be incremental and reported. Instead: added a
+  `## Workflow` section spelling out the whole loop as a standing rule — one
+  continuously-iterated `plan.md` with a mandated top structure (read
+  brief/spec, background, current state), refine-then-verify per stage,
+  *analyse and present the diagnosis before editing* when the user reports a
+  problem, and fold the stage's state update into its last commit so
+  progress is never lost to a `/clear`.
+  Reason: the immediately preceding moment in this log — finding the
+  clash-rule mismatch only because we were testing by hand in small,
+  closely-watched steps rather than saving verification for one pass at the
+  end — is itself the case for codifying that discipline rather than trusting
+  it to survive by habit alone. The same session that discovered how much a
+  small-step, diagnose-before-editing loop is worth is the session that
+  would otherwise have taken that lesson with it into the next `/clear`.
+  Evidence: the rule text was drafted, restated back to the user in full
+  twice, and only written into `CLAUDE.md` after explicit confirmation both
+  times (nothing here was assumed). Missing: nothing enforces that a future
+  session actually follows it — there's no test or check that fails if an
+  agent skips refining a stage's plan or edits before presenting a diagnosis;
+  a process rule about how we collaborate isn't the kind of thing
+  `pnpm check` can verify, so this one depends on being read and followed at
+  the start of each conversation.
+  Commit: [`6970b4f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/6970b4f) (`CLAUDE.md`).
