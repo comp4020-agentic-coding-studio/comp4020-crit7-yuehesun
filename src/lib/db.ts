@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { activities, type Course, courses, picks, type Session, sessions } from "./schema.ts";
@@ -148,4 +148,69 @@ export function gridHourRange(): { startHour: number; endHour: number } {
   const minStart = Math.min(...rows.map((r) => r.startMinutes));
   const maxEnd = Math.max(...rows.map((r) => r.endMinutes));
   return { startHour: Math.floor(minStart / 60), endHour: Math.ceil(maxEnd / 60) };
+}
+
+// --- Write path: add/swap/remove (Stage 2b, plan.md §6) -----------------
+
+export type AddOrSwapResult = { ok: true } | { ok: false; clashWithSessionId: number };
+
+// The exact ordering from plan.md §6: find the old pick for this activity
+// (if any) *before* clash-checking, so the candidate is checked against
+// every other pick with the old one explicitly excluded — never against
+// itself — and nothing is written until we know it's clash-free. This is
+// the fix for the earlier bug, where deleting the old pick first could
+// leave an owner with neither pick if the new one then turned out to clash.
+export function addOrSwapPick(ownerId: string, sessionId: number): AddOrSwapResult {
+  const session = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+  if (!session) throw new Error(`no such session ${sessionId}`);
+
+  const existingPicks = listPicksForOwner(ownerId);
+  const oldPick = existingPicks.find((p) => p.activityId === session.activityId);
+
+  const clash = existingPicks.find((p) => {
+    if (oldPick && p.pickId === oldPick.pickId) return false;
+    return p.day === session.day && session.startMinutes < p.endMinutes && p.startMinutes < session.endMinutes;
+  });
+  if (clash) return { ok: false, clashWithSessionId: clash.sessionId };
+
+  db.transaction((tx) => {
+    if (oldPick) tx.delete(picks).where(eq(picks.id, oldPick.pickId)).run();
+    tx.insert(picks).values({ ownerId, sessionId, activityId: session.activityId }).run();
+  });
+  return { ok: true };
+}
+
+export function removePick(ownerId: string, activityId: number): void {
+  db.delete(picks)
+    .where(and(eq(picks.ownerId, ownerId), eq(picks.activityId, activityId)))
+    .run();
+}
+
+export interface SessionInfo {
+  sessionId: number;
+  day: number;
+  startMinutes: number;
+  endMinutes: number;
+  activityCode: string;
+  courseCode: string;
+}
+
+// Looked up for the clash dialog (plan.md §6 step 6): the "with" session in
+// a clash can belong to any course the owner has picked, not just the one
+// currently open in the panel, so this can't reuse listActivitiesWithSessions.
+export function getSessionInfo(sessionId: number): SessionInfo | undefined {
+  return db
+    .select({
+      sessionId: sessions.id,
+      day: sessions.day,
+      startMinutes: sessions.startMinutes,
+      endMinutes: sessions.endMinutes,
+      activityCode: activities.code,
+      courseCode: courses.code,
+    })
+    .from(sessions)
+    .innerJoin(activities, eq(sessions.activityId, activities.id))
+    .innerJoin(courses, eq(activities.courseId, courses.id))
+    .where(eq(sessions.id, sessionId))
+    .get();
 }

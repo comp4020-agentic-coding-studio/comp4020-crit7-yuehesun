@@ -1,13 +1,13 @@
 ---
 import "../styles.css";
-import { gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwner } from "../lib/db";
+import { getSessionInfo, gridHourRange, listActivitiesWithSessions, listCourses, listPicksForOwner } from "../lib/db";
 import { DAY_LABELS, formatMinutes } from "../lib/format";
 
 // Stage 2a: the real 3-region shell, server-rendered from the seeded data —
 // course list (left), week grid (main), session panel (right). Course
 // selection is a plain `?course=` link so the whole page works with no JS.
-// The write path (Add/Remove/clash) lands in Stage 2b; the JS
-// partial-update/preview layer in Stage 2c. See plan.md §4.
+// Stage 2b adds the Add/Remove write path and the no-JS clash dialog; the
+// JS partial-update/preview layer is Stage 2c. See plan.md §4/§6.
 const ownerId = Astro.locals.ownerId;
 
 const courses = listCourses();
@@ -17,6 +17,13 @@ const activities = selectedCourse ? listActivitiesWithSessions(selectedCourse.id
 
 const picks = listPicksForOwner(ownerId);
 const pickedSessionByActivity = new Map(picks.map((p) => [p.activityId, p.sessionId]));
+
+// The no-JS path for a rejected Add/swap (plan.md §6 step 6): /api/picks
+// redirects back here with the two colliding session ids as query params.
+const clashParam = Astro.url.searchParams.get("clash");
+const withParam = Astro.url.searchParams.get("with");
+const clashSession = clashParam ? getSessionInfo(Number(clashParam)) : undefined;
+const clashWithSession = withParam ? getSessionInfo(Number(withParam)) : undefined;
 
 const { startHour, endHour } = gridHourRange();
 const halfHourSlots = (endHour - startHour) * 2;
@@ -92,12 +99,13 @@ function rowForMinutes(minutes: number): number {
               {
                 picks.map((pick) => (
                   <a
-                    class="grid-pick"
+                    class={`grid-pick${pick.sessionId === clashWithSession?.sessionId ? " clash" : ""}`}
                     href={`/?course=${pick.courseId}`}
                     style={`grid-column: ${pick.day + 2}; grid-row: ${rowForMinutes(pick.startMinutes)} / span ${
                       (pick.endMinutes - pick.startMinutes) / 30
                     }; background: ${pick.courseColor}`}
                   >
+                    {pick.sessionId === clashWithSession?.sessionId && <span aria-hidden="true">⚠ </span>}
                     {pick.courseCode} · {pick.activityCode}
                   </a>
                 ))
@@ -130,8 +138,23 @@ function rowForMinutes(minutes: number): number {
                       <ul class="session-list">
                         {activity.sessions.map((session) => (
                           <li class={session.id === pickedSessionId ? "picked" : undefined}>
-                            {DAY_LABELS[session.day]} {formatMinutes(session.startMinutes)}–
-                            {formatMinutes(session.endMinutes)} · {session.location}
+                            <span>
+                              {DAY_LABELS[session.day]} {formatMinutes(session.startMinutes)}–
+                              {formatMinutes(session.endMinutes)} · {session.location}
+                            </span>
+                            {session.id === pickedSessionId ? (
+                              <form method="POST" action="/api/picks/remove">
+                                <input type="hidden" name="activityId" value={activity.id} />
+                                <input type="hidden" name="courseId" value={selectedCourse.id} />
+                                <button type="submit">Remove</button>
+                              </form>
+                            ) : (
+                              <form method="POST" action="/api/picks">
+                                <input type="hidden" name="sessionId" value={session.id} />
+                                <input type="hidden" name="courseId" value={selectedCourse.id} />
+                                <button type="submit">Add</button>
+                              </form>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -145,6 +168,30 @@ function rowForMinutes(minutes: number): number {
           }
         </section>
       </div>
+
+      {
+        clashSession && clashWithSession && (
+          <dialog open aria-labelledby="clash-heading">
+            <h2 id="clash-heading">That clashes with a session you already picked</h2>
+            <p>
+              <strong>
+                {clashSession.courseCode} {clashSession.activityCode}
+              </strong>{" "}
+              ({DAY_LABELS[clashSession.day]} {formatMinutes(clashSession.startMinutes)}–
+              {formatMinutes(clashSession.endMinutes)}) overlaps{" "}
+              <strong>
+                {clashWithSession.courseCode} {clashWithSession.activityCode}
+              </strong>{" "}
+              ({DAY_LABELS[clashWithSession.day]} {formatMinutes(clashWithSession.startMinutes)}–
+              {formatMinutes(clashWithSession.endMinutes)}), which is already on your timetable. Remove it first if
+              you want to make this swap.
+            </p>
+            <form method="dialog">
+              <button type="submit">OK</button>
+            </form>
+          </dialog>
+        )
+      }
     </main>
   </body>
 </html>
