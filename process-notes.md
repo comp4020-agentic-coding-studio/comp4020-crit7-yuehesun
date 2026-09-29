@@ -244,3 +244,40 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   `pnpm check` can verify, so this one depends on being read and followed at
   the start of each conversation.
   Commit: [`6970b4f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/6970b4f) (`CLAUDE.md`).
+
+- **Diagnosed the generated migration's real transactional behaviour
+  instead of trusting drizzle-kit's statement order and shipping it as
+  generated.** Adding `sessions_lecture_activity_unique` required a
+  table-rebuild migration (SQLite can't add a `FOREIGN KEY` to an existing
+  table). `pnpm db:generate` wrote one that looked plausible — it even
+  included the standard `PRAGMA foreign_keys=OFF;`/`...=ON;` bracketing
+  drizzle-kit always emits around a rebuild. The obvious path was to accept
+  that as evidence FK checks were off for the whole file and move on.
+  Instead, booting the real built server against a scratch database first
+  (rather than only trusting `pnpm check`'s in-memory test DB, which
+  happened not to exercise this exact path) surfaced a genuine
+  `DrizzleError` on the rebuild's `INSERT INTO __new_sessions`. Reading
+  drizzle-orm's own `SQLiteSyncDialect.migrate()` source showed it wraps
+  every migration file in one outer `BEGIN...COMMIT`; SQLite documents
+  `PRAGMA foreign_keys` as a no-op once issued inside an active
+  transaction, so the generated file's own `OFF` pragma was never real —
+  FK enforcement stayed on for the whole rebuild. That meant the
+  `CREATE TABLE __new_sessions` (whose FK target was a new
+  `activities(id, code)` unique index) failed because drizzle-kit had
+  placed that index's `CREATE UNIQUE INDEX` at the *end* of the file, after
+  the table that depended on it. Reproduced the exact failure in isolation
+  first, with a small `better-sqlite3` script replaying the file's
+  statements inside an explicit transaction, before touching the migration
+  — so the fix (moving that one `CREATE UNIQUE INDEX` earlier in the file)
+  was applied against a confirmed cause, not a guess.
+  Reason: shipping the as-generated file would have passed local dev (a
+  fresh `pnpm dev` on an empty DB never runs this particular rebuild path)
+  and only broken on the next real upgrade of an existing database — likely
+  first noticed against the production Fly volume.
+  Evidence: the manual `better-sqlite3` replay script reproduced
+  `foreign key mismatch - "__new_sessions" referencing "activities"`
+  before the fix and ran clean after it; a subsequent `pnpm build` +
+  fresh `node ./dist/server/entry.mjs` boot against a new scratch
+  `DATABASE_PATH` came up clean (`curl` returned `status=200`).
+  Commit: [`7106ad8`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/7106ad8)
+  (`drizzle/0002_messy_storm.sql`).
