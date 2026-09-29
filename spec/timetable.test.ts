@@ -85,8 +85,12 @@ async function removePick(jar: Jar, activity: number, courseCode: string): Promi
   });
 }
 
-async function pageHtml(jar: Jar, courseCode: string): Promise<string> {
-  const res = await jar.fetch(`/?course=${courseId(courseCode)}`);
+// Stage 3: the panel shows one activity at a time, so a caller checking a
+// specific session's picked state has to say which activity's panel to
+// load — the course's default (alphabetically-first) activity otherwise.
+async function pageHtml(jar: Jar, courseCode: string, activityCode?: string): Promise<string> {
+  const activityQs = activityCode ? `&activity=${activityId(courseCode, activityCode)}` : "";
+  const res = await jar.fetch(`/?course=${courseId(courseCode)}${activityQs}`);
   return res.text();
 }
 
@@ -106,8 +110,8 @@ describe("timetable: add/swap/remove over HTTP", () => {
     const session = findSession("SLOP4225", "LecA", true);
 
     expect((await addPick(jar, session, "SLOP4225")).status).toBe(303);
-    expect(isPicked(await pageHtml(jar, "SLOP4225"), session)).toBe(true);
-    expect(isPicked(await pageHtml(jar, "SLOP4225"), session)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), session)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), session)).toBe(true);
   });
 
   it("isolates picks between two owners", async () => {
@@ -117,8 +121,8 @@ describe("timetable: add/swap/remove over HTTP", () => {
 
     await addPick(jarA, session, "SLOP1836");
 
-    expect(isPicked(await pageHtml(jarB, "SLOP1836"), session)).toBe(false);
-    expect(isPicked(await pageHtml(jarA, "SLOP1836"), session)).toBe(true);
+    expect(isPicked(await pageHtml(jarB, "SLOP1836", "LecA"), session)).toBe(false);
+    expect(isPicked(await pageHtml(jarA, "SLOP1836", "LecA"), session)).toBe(true);
   });
 
   it("swapping to a different session in the same activity replaces the old pick", async () => {
@@ -127,10 +131,10 @@ describe("timetable: add/swap/remove over HTTP", () => {
     const second = findSession("SLOP2805", "TutA", false, 1);
 
     await addPick(jar, first, "SLOP2805");
-    expect(isPicked(await pageHtml(jar, "SLOP2805"), first)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP2805", "TutA"), first)).toBe(true);
 
     await addPick(jar, second, "SLOP2805");
-    const html = await pageHtml(jar, "SLOP2805");
+    const html = await pageHtml(jar, "SLOP2805", "TutA");
     expect(isPicked(html, second)).toBe(true);
     expect(isPicked(html, first)).toBe(false);
   });
@@ -154,7 +158,7 @@ describe("timetable: add/swap/remove over HTTP", () => {
     expect(location).toContain("clash=");
     expect(location).toContain(`with=${sessionRowId(otherPick)}`);
 
-    const html = await pageHtml(jar, "SLOP4225");
+    const html = await pageHtml(jar, "SLOP4225", "TutA");
     expect(isPicked(html, oldSession)).toBe(true);
     expect(isPicked(html, candidate)).toBe(false);
   });
@@ -170,7 +174,7 @@ describe("timetable: add/swap/remove over HTTP", () => {
     const res = await addPick(jar, second, "SLOP2805");
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toContain("clash=");
-    expect(isPicked(await pageHtml(jar, "SLOP2805"), second)).toBe(false);
+    expect(isPicked(await pageHtml(jar, "SLOP2805", "TutA"), second)).toBe(false);
   });
 
   it("allows a lecture and a non-lecture activity to overlap (lecture-permissive rule)", async () => {
@@ -191,9 +195,10 @@ describe("timetable: add/swap/remove over HTTP", () => {
     expect(tutorialRes.status).toBe(303);
     expect(tutorialRes.headers.get("location")).not.toContain("clash=");
 
-    const html = await pageHtml(jar, "SLOP4225");
-    expect(isPicked(html, lecture)).toBe(true);
-    expect(isPicked(html, tutorial)).toBe(true);
+    // Stage 3: the two activities no longer share one panel render, so each
+    // needs its own fetch to check its picked session.
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), lecture)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "TutA"), tutorial)).toBe(true);
   });
 
   it("adds a non-overlapping session from a different course alongside an existing pick", async () => {
@@ -206,8 +211,8 @@ describe("timetable: add/swap/remove over HTTP", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).not.toContain("clash=");
 
-    expect(isPicked(await pageHtml(jar, "SLOP4225"), first)).toBe(true);
-    expect(isPicked(await pageHtml(jar, "SLOP3092"), second)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), first)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP3092", "LecA"), second)).toBe(true);
   });
 
   it("removes a pick", async () => {
@@ -215,10 +220,10 @@ describe("timetable: add/swap/remove over HTTP", () => {
     const session = findSession("SLOP4225", "LecA", true);
 
     await addPick(jar, session, "SLOP4225");
-    expect(isPicked(await pageHtml(jar, "SLOP4225"), session)).toBe(true);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), session)).toBe(true);
 
     await removePick(jar, activityId("SLOP4225", "LecA"), "SLOP4225");
-    expect(isPicked(await pageHtml(jar, "SLOP4225"), session)).toBe(false);
+    expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), session)).toBe(false);
   });
 });
 

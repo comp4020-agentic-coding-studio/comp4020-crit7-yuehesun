@@ -28,6 +28,10 @@ Clicking a course shows its available slots as a list on the right side of the p
   JSON fragment response, HTTPS-origin and CSRF checks all correct). Left:
   the manual browser pass at both viewports (§11), then `process-notes.md`,
   `PROCESS.md`, and `reflections/crit-7.md`.
+- Stage 3 approved, starting now (2026-09-30): Courses-column layout fixes
+  (swatch+code alignment, activity-code indent) and a switch from
+  course-level to activity-level selection, incl. a seed-data bump and an
+  authorised production reseed. See §12's Stage 3 for the breakdown.
 - Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
 
 
@@ -197,14 +201,19 @@ source to find out what it produced.
 Everything lives at `/`. Three regions:
 
 - **Left — course list.** The 4 seeded courses, colour swatch + code +
-  title. Selecting one loads its activities into the right panel.
-- **Right — session panel.** The selected course's activities, each a
-  heading (its `code`, e.g. "TutA", with a check mark if it already has a
-  pick) and its candidate sessions listed under it, each row showing
-  time/location plus its own explicit **Add** button (kept from revision 2
-  — per-row, not one shared button). The row for whichever session is
-  *currently picked* for that activity shows a **Remove** button instead of
-  Add (this is where Remove lives — see below).
+  title, each listing its activities underneath (revision 3: course names
+  aren't links — the activities are; selecting one loads just that
+  activity's sessions into the right panel).
+- **Right — session panel.** The panel title still names the selected
+  course; below it, only the *selected activity's* block is shown (its
+  `code`, e.g. "TutA", with a check mark if it already has a pick) with its
+  candidate sessions listed under it — revision 3: one activity at a time,
+  not every activity of the course at once, so each gets a much larger
+  area. Each row shows time/location plus its own explicit **Add** button
+  (kept from revision 2 — per-row, not one shared button). The row for
+  whichever session is *currently picked* for that activity shows a
+  **Remove** button instead of Add (this is where Remove lives — see
+  below).
   - **Long lists (10+ sessions):** each activity's own session list is a
     fixed-height scroll region (`overflow-y: auto`, roughly 6 rows visible)
     rather than letting it stretch the whole panel — the same rule on both
@@ -228,9 +237,10 @@ Everything lives at `/`. Three regions:
   tracks, course code + activity code visible in the block.
   - **No Remove control on the grid itself, and clicking a block is fully
     defined (fixes the undefined behaviour flagged in review):** clicking
-    or tapping a committed pick's block selects that pick's course in the
-    left list and opens its activities in the right panel (scrolled/focused
-    to the relevant activity), so you can inspect or swap it from there. It
+    or tapping a committed pick's block opens that exact activity's block in
+    the right panel (revision 3: the panel shows one activity at a time, so
+    "focused to" is now literal — it's the only activity shown), so you can
+    inspect or swap it from there. It
     never removes anything and never previews anything else — it's
     navigation to the panel, not a grid-level action. Clicking an empty
     grid cell (no pick there) does nothing, since an empty cell isn't
@@ -466,6 +476,41 @@ requirement.
   `.github/workflows/checks.yml` (Status line above); deploy; the manual
   browser pass from §11 at both viewports; update `process-notes.md`,
   `PROCESS.md`, and `reflections/crit-7.md`.
+
+### Stage 3 (approved — 2026-09-30, after using the Stage 2 build)
+
+Four refinements to the Courses column and the selection model, requested
+after trying the app: swatch/code alignment, activity-code indent, a switch
+from course-level to activity-level selection, and a seed-data bump (with
+an authorised production reseed) to keep the long-list scroll demoable
+under the new, larger per-activity panel. No spec test depends on the
+current seed counts or course-list DOM shape (checked directly against
+`spec/*.test.ts`), so nothing here is blocked by or breaks the suite.
+
+- **3a — Courses-column layout fixes (CSS/markup only).** Restructure each
+  course `<li>` so the swatch+code sit in their own `.course-header` row
+  and the title is a sibling `<p>` below it, unindented. Fix the CSS
+  specificity bug where `.course-list ul { padding: 0 }` (0,1,1) was
+  silently overriding `.course-activities`'s own indent (0,1,0) regardless
+  of source order, by scoping that rule to something at least as specific
+  (e.g. `.course-list .course-activities`).
+- **3b — Activity-level selection.** URL scheme becomes
+  `?course=<id>&activity=<id>`. Course names/rows stop being links;
+  `renderActivityPanel` (`src/lib/fragments.ts` — already scoped to one
+  activity, unchanged) is now called once for the selected activity instead
+  of once per activity in the course. Each activity row in the Courses
+  column becomes the clickable element instead. `renderGridPick`'s link
+  gains `&activity=<id>` so a grid-block click opens straight to that
+  activity. No changes needed to `/api/picks(/remove)` or
+  `timetable-client.ts` — both were already scoped to one activity.
+- **3c — Seed bump + deploy + reseed.** Raise SLOP2805 `TutA`'s
+  `totalSessions` in `src/lib/seed.ts` and `.session-list`'s CSS
+  `max-height`, tuned together so the now-larger single-activity list is
+  still demonstrably scrollable (§11). No schema/migration change. Local
+  `.data/app.db` deleted to pick up the new seed. Production: deploy first,
+  then reseed by clearing the Fly volume's db file so boot-time
+  `migrate()`/`seedIfEmpty()` repopulate it — user-authorised, existing
+  production data is seed/test data only.
 
 ## 13. Open questions for review
 

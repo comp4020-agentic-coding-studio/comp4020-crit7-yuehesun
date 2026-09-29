@@ -31,7 +31,7 @@ export function renderGridPick(pick: PickWithSlice, startHour: number, clash: bo
       ? ` width: calc(100% / ${pick.sliceCount}); margin-left: calc(100% / ${pick.sliceCount} * ${pick.sliceIndex});`
       : "";
   return (
-    `<a class="${classes}" href="/?course=${pick.courseId}" data-activity-id="${pick.activityId}" ` +
+    `<a class="${classes}" href="/?course=${pick.courseId}&activity=${pick.activityId}" data-activity-id="${pick.activityId}" ` +
     `data-day="${pick.day}" data-start="${pick.startMinutes}" data-end="${pick.endMinutes}" ` +
     // background-color (not the "background" shorthand) so the kind-based
     // stripe pattern below, set via background-image in styles.css, doesn't

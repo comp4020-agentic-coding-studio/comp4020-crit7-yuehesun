@@ -24,6 +24,13 @@ const requestedCourseId = Number(Astro.url.searchParams.get("course"));
 const selectedCourse = courses.find((c) => c.id === requestedCourseId) ?? courses[0];
 const activities = selectedCourse ? listActivitiesWithSessions(selectedCourse.id) : [];
 
+// Stage 3: the panel shows one activity at a time, not every activity of the
+// selected course — ?activity= picks which one, falling back to the first
+// (same ordering listActivityCodes/listActivitiesWithSessions already use)
+// if missing or it doesn't belong to the selected course.
+const requestedActivityId = Number(Astro.url.searchParams.get("activity"));
+const selectedActivity = activities.find((a) => a.id === requestedActivityId) ?? activities[0];
+
 const picks = listPicksForOwnerWithSlices(ownerId);
 const pickedSessionByActivity = new Map(picks.map((p) => [p.activityId, p.sessionId]));
 
@@ -65,24 +72,25 @@ const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
           <ul>
             {
               courses.map((course) => (
-                <li>
-                  <a
-                    href={`/?course=${course.id}`}
-                    class="course-link"
-                    aria-current={course.id === selectedCourse?.id ? "page" : undefined}
-                  >
+                <li class={`course-entry${course.id === selectedCourse?.id ? " course-entry--current" : ""}`}>
+                  <div class="course-header">
                     <span class="swatch" style={`background: ${course.color}`} aria-hidden="true" />
-                    <span class="course-name">
-                      <span class="course-code">{course.code}</span>
-                      <span class="course-title">{course.title}</span>
-                    </span>
-                  </a>
+                    <span class="course-code">{course.code}</span>
+                  </div>
+                  <p class="course-title">{course.title}</p>
                   <ul class="course-activities">
                     {(activitiesByCourse.get(course.id) ?? []).map((activity) => {
                       const picked = pickedSessionByActivity.has(activity.id);
+                      const current = course.id === selectedCourse?.id && activity.id === selectedActivity?.id;
                       return (
                         <li class="course-nav-activity" data-activity-id={activity.id}>
-                          <span class="activity-code">{activity.code}</span>
+                          <a
+                            class="activity-link"
+                            href={`/?course=${course.id}&activity=${activity.id}`}
+                            aria-current={current ? "page" : undefined}
+                          >
+                            <span class="activity-code">{activity.code}</span>
+                          </a>
                           <span class={`status-icon ${picked ? "status-icon--done" : "status-icon--todo"}`} aria-hidden="true">
                             {picked ? "✓" : "✗"}
                           </span>
@@ -139,20 +147,19 @@ const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
                 <h2 id="panel-heading">
                   {selectedCourse.code} — {selectedCourse.title}
                 </h2>
-                {activities.map((activity) => {
-                  const pickedSessionId = pickedSessionByActivity.get(activity.id);
-                  return (
-                    <Fragment
-                      set:html={renderActivityPanel(
-                        activity,
-                        pickedSessionId,
-                        selectedCourse.id,
-                        startHour,
-                        selectedCourse.color,
-                      )}
-                    />
-                  );
-                })}
+                {selectedActivity ? (
+                  <Fragment
+                    set:html={renderActivityPanel(
+                      selectedActivity,
+                      pickedSessionByActivity.get(selectedActivity.id),
+                      selectedCourse.id,
+                      startHour,
+                      selectedCourse.color,
+                    )}
+                  />
+                ) : (
+                  <p>This course has no activities yet.</p>
+                )}
               </>
             ) : (
               <p>No courses yet.</p>
