@@ -21,9 +21,19 @@ good means here lives; this file is how you got there.
 
 ## How I got here
 
-The account of the process: how the work actually went, and how you knew the
-result was right. Tell it in whatever order makes it clear. A weekly prototype
-needs a paragraph or two; an assignment needs more.
+**Deciding where the data comes from.** Before writing any schema, I asked
+whether the brief expected real ANU data:
+
+> Where does the data come from for this full-stack task? ... Should we use
+> real university data or mock data?
+
+Neither the brief nor the spec says, so it was mine to decide. Since the repo
+and the running app both go public at the cutoff, the only safe answer was:
+nothing real. I chose to write my own seed data rather than scrape or hand-type
+anything from an actual ANU system, and to reuse the fictional courses from our
+A2 gallery instead of inventing new ones from scratch — already public, already
+fictional, so it carries none of the privacy risk real data would. Documented in
+`README.md` in [`93dfd7c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/93dfd7c).
 
 Cite the record as you go, as links whose text is the commit hash or range and
 whose target is this repo's commit or compare URL, so a reader clicks straight
@@ -32,11 +42,6 @@ to the evidence:
 - one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
 - a range:
   [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
-
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
-
-> the prompt, verbatim
 
 Screenshots are welcome where one carries the point better than a sentence does.
 Commit the file to this repo and link it with a **relative** path, which is what
