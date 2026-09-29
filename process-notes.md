@@ -52,11 +52,11 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   Instead: clash-check the candidate against the owner's other picks
   (excluding the one being replaced) *before* deleting or inserting
   anything; on a clash, reject and leave the old pick untouched.
-  Evidence: none yet — the fix exists only as reasoning from this session,
-  not in anything committed. Missing: the picks API itself, plus a
-  regression test that swapping into a clashing session is rejected and
-  leaves the original pick untouched. Stage 2.
-  Commit: pending: Stage 2.
+  Evidence: `spec/timetable.test.ts`'s `"rejects swapping into a clash with
+  a different activity's pick, leaving the original untouched"` test —
+  green, and it would fail under the rejected ordering (old pick deleted
+  before the clash check).
+  Commit: [`e07e1ba`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/e07e1ba) (`src/lib/db.ts`'s `addOrSwapPick`, `spec/timetable.test.ts`).
 
 - **Found the CI deploy pipeline still verifies a deleted feature.**
   Reviewing `plan.md` against the repo's actual CI config (not just the
@@ -87,7 +87,22 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   keep that shape, since it's what the starter already does. Instead:
   per-browser `owner_id` cookie (independent timetable per visitor) and a
   single page.
-  Evidence: none yet — decided before any code existed. Missing: a test that
-  two different cookies get independent timetables (a pick under one
-  `owner_id` is invisible to another). Stage 2.
-  Commit: pending: Stage 2.
+  Evidence: `spec/timetable.test.ts`'s `"isolates picks between two owners"`
+  test — two cookie jars against the running server, green.
+  Commit: [`dc387dd`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/dc387dd) (`src/middleware.ts`) and [`e07e1ba`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/e07e1ba) (the isolation test).
+
+- **Tested the DB constraints against an isolated fixture, not the live
+  `db.ts` singleton.** Writing the "duplicate `(owner_id, activity_id)`" and
+  "mismatched `(session_id, activity_id)`" constraint tests, the obvious
+  approach was to import `src/lib/db.ts` directly and insert conflicting
+  rows against its exported `db`. Instead: a throwaway sqlite file + the
+  real migrations, built inline in the test, never touching the app's own
+  module. Importing `db.ts` runs its module-level side effects
+  (`migrate()`, `seedIfEmpty()`) against whatever `DATABASE_PATH` the
+  process happens to have — in the vitest worker (not `global-setup.ts`'s
+  spawned server) that's the default `./.data/app.db`, i.e. a real
+  developer's local database, on every test run.
+  Evidence: `spec/timetable.test.ts`'s `"database constraints (isolated
+  fixture, no HTTP)"` block — both constraint tests pass without opening or
+  writing `.data/app.db`.
+  Commit: [`e07e1ba`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/e07e1ba).
