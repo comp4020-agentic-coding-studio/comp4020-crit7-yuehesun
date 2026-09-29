@@ -16,14 +16,21 @@ what the agent needs to carry from any of it is your call.
 
 ## Process
 
-- A moment = a real fork: the obvious alternative, what we did instead, why
-  it helped. Log it in `process-notes.md` with exactly one tag: **harness**
-  (a rule/check/test/deletion is actually committed), **pending** (the
-  correction is real but nothing enforces it yet — say what's missing and
-  which stage adds it), or **retry** (only fixed in chat, not citable).
-- `plan.md` is scratch, never citable evidence.
-- `PROCESS.md` stays empty while we build. Once all coding is done, we sit
-  down together and choose which `process-notes.md` moments get promoted —
-  don't fill it in along the way, even from a strong harness moment.
-- Before shipping: trim `PROCESS.md` to 150–300 words and write
-  `reflections/crit-7.md` from `process-notes.md`, kept moments or not.
+- Read the `PROCESS.md` template in this repo and the [Assessment
+  page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/).
+  Watch for harness moments during the work: a real fork where a mistake or
+  risk was turned into a rule in `CLAUDE.md`, a check or test in `spec/`, or
+  an attempt thrown away and committed as a deletion. When one happens, log
+  it in `process-notes.md` and tell me.
+- Don't log chat-only corrections, renames, tool workarounds, or progress
+  notes.
+- For each entry, record: what happened, the obvious alternative, what we
+  did instead, why it helped (evidence: a failing-then-passing test, a run
+  output, or a before/after), and the commit hash. The commit must really
+  exist — get it from `git log`/`git show`, never invent one.
+- Before shipping: remind me to write `PROCESS.md` — pick only the most
+  important moment from `process-notes.md` and write it up as a coherent,
+  clearly reasoned narrative of the whole build, brief to harness. A crit
+  week needs 150–300 words; an assignment needs 400–600.
+- Also remind me to write `reflections/` from the whole `process-notes.md`,
+  kept moments or not.
