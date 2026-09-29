@@ -4,55 +4,98 @@ Candidate moments, kept as they happen. This is scratch, not the submission —
 `PROCESS.md` is the curated version; moments get promoted there by hand, not
 automatically. Not checked by `pnpm check:evidence`.
 
+Each moment names the obvious alternative, what we did instead, and how we
+knew it helped, then one tag:
+
+- **harness** — a rule in `CLAUDE.md`, a check/test in `spec/`, or a deletion
+  is actually committed.
+- **pending** — the correction is real (or reasoned through), but nothing in
+  the repo enforces it yet. States exactly what's missing and which stage
+  adds it.
+- **retry** — only corrected in chat; no trace in the repo. Named so it isn't
+  lost, but it can't be cited in `PROCESS.md`.
+
+`plan.md` is a scratch document and is never cited as evidence here or in
+`PROCESS.md`, even when a decision is also described there.
+
 ## Moments
 
-- **Decided the data-sourcing policy** (2026-09-29): no real ANU data or
-  personal information in the seed data, since the repo/app go public at the
-  cutoff. Reusing the fictional A2 gallery courses instead. Documented in
-  `README.md` ([`93dfd7c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/93dfd7c))
-  and `PROCESS.md` ([`9c7af09`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/9c7af09)).
-- **Set process discipline in `CLAUDE.md`** (2026-09-29): incremental commits,
-  this running log, a pre-ship trim reminder, a reflection reminder.
-- **Revision 5 of `plan.md`: terminology cleanup** (2026-09-29): "milestone"
-  was doing double duty for both build steps and `process-notes.md` moments.
-  Renamed build steps to Stage 1, Stage 2, … throughout, and added a Status
-  line so the plan states Stage 1's approval state on its own, without
-  needing the conversation that produced it.
-- **Resolved a Stage 1 scope conflict before writing code** (2026-09-29):
-  plan.md §2 says the new schema "replac[es] `messages` entirely", but §12
-  says Stage 1 has no pages/API routes/UI. Dropping `messages` from the
-  schema breaks `db.ts`, `index.astro`, `api/messages.ts`, `api/events.ts`,
-  `events.ts` and `guestbook.test.ts`, which all reference it. Asked; the
-  call was to drop `messages` now and delete/trim the now-dead starter
-  plumbing so `pnpm check` stays green, without building any Stage-2 UI —
-  i.e. cleanup of superseded starter code, not new pages.
-- **Reset the migration history instead of fighting drizzle-kit's rename
-  prompt** (2026-09-29): `pnpm db:generate` after the schema rewrite asked
-  (interactively, no TTY available) whether each new table was a rename of
-  `messages` — it isn't. Since nothing has deployed with real data yet,
-  deleted `drizzle/` and generated a fresh baseline migration instead of
-  answering prompts; a real deployed volume would need the rename path
-  handled properly instead.
-- **`better-sqlite3` doesn't enforce foreign keys unless asked** (2026-09-29):
-  SQLite disables FK enforcement per-connection by default, which would have
-  silently defeated the `picks` composite FK from plan.md §2 (the whole
-  point of which is that the database rejects a mismatched
-  `(session_id, activity_id)` pair). Added `client.pragma("foreign_keys =
-  ON")` in `db.ts` — caught before it could hide a real test gap, since Stage
-  1 doesn't yet have a test that exercises this FK directly (that's a Stage
-  2 spec test per plan.md §10).
-- **`scripts/seed-summary.ts` needs explicit `.ts` import extensions**
-  (2026-09-29): it's invoked with plain `node`, not through Astro/Vite, and
-  Node's own ESM resolution (unlike a bundler) requires the extension on
-  relative specifiers. Gave `db.ts`'s own internal imports the same `.ts`
-  extensions so it loads correctly either way — TypeScript's
-  `allowImportingTsExtensions` (already on via `astro/tsconfigs/strict`)
-  keeps `pnpm typecheck` and Vite happy with the explicit extension too.
-- **Stage 1 complete** (2026-09-29): `src/lib/schema.ts` (four tables),
-  `drizzle/0000_mushy_doctor_faustus.sql`, `src/lib/seed.ts` (deterministic
-  generator: 4 real gallery courses — SLOP4225, SLOP1836, SLOP2805, SLOP3092
-  — authored activity shapes, seeded-PRNG alternatives, constructed
-  clash-free baseline, 2 forced clash pairs), `spec/seed.test.ts`, and `pnpm
-  db:summary`. `pnpm check` green (17 files typechecked, 29 tests passing).
-  No pages/API routes/UI touched beyond deleting the now-dead
-  messages/SSE starter plumbing and trimming `index.astro` to a placeholder.
+- **Decided the data-sourcing policy.** Obvious alternative: use real ANU
+  course/timetable data, since it's the most direct source. Instead: no real
+  ANU data or personal information anywhere in the seed data, since the repo
+  and the running app go public at the cutoff — reused the fictional A2
+  gallery courses instead. Documented in `README.md`
+  ([`93dfd7c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/93dfd7c))
+  and `PROCESS.md`
+  ([`9c7af09`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/9c7af09)).
+  Nothing in the repo checks that a future edit doesn't reintroduce real
+  course codes.
+  Tag: **pending** — missing: a test asserting seed course codes match the
+  gallery's `SLOP####` pattern, not a real ANU code. Stage 2.
+
+- **Dropped `messages` and its dead starter plumbing.** Obvious alternative:
+  leave `api/messages.ts`, `api/events.ts`, `lib/events.ts` and
+  `spec/guestbook.test.ts` in place since Stage 1 isn't supposed to touch
+  pages/routes/UI. Instead: since the new schema drops the `messages` table
+  entirely, that plumbing is dead code with no table to read from — deleted
+  it and trimmed `index.astro` to a placeholder, rather than leaving code in
+  the repo that no longer runs against anything.
+  Committed as a deletion in
+  [`438123e`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/438123e).
+  Tag: **harness** — a deletion, actually committed.
+
+- **Guaranteed a clash-free timetable exists.** Obvious alternative:
+  hand-type a few "safe" rows, or trust the seeded PRNG's output as-is.
+  Either way a bad run could hand every visitor an unwinnable timetable —
+  four courses with no way to pick one session per activity without a
+  clash. Instead: the generator places each activity's baseline session into
+  an already-free slot *by construction*, before any random alternative or
+  forced clash is added, and `spec/seed.test.ts`'s
+  `"the constructed baseline is mutually non-overlapping"` test checks this
+  on every run.
+  Committed together in
+  [`40763c0`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/40763c0).
+  Tag: **harness** — a check in `spec/`, actually committed and currently
+  green.
+
+- **Turned on foreign-key enforcement.** Obvious alternative: trust the
+  composite FK declared on `picks` in `schema.ts` to actually be enforced by
+  SQLite. Instead: SQLite disables FK enforcement per-connection by default
+  in better-sqlite3, which would have left `picks.(session_id, activity_id)`
+  declared but never checked — added `client.pragma("foreign_keys = ON")`
+  before running migrations.
+  Committed in
+  [`438123e`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/438123e)
+  (same commit as the schema rewrite).
+  Tag: **pending** — missing: a test that inserting a `picks` row with a
+  mismatched `(session_id, activity_id)` pair is actually rejected. Stage 2,
+  once the picks API exists to exercise it.
+
+- **Fixed the swap/clash ordering bug.** Reviewing the plan (not yet any
+  code), found that changing a pick to a different session of the same
+  activity would delete the old pick and insert the new one without
+  clash-checking the new session against the owner's *other* picks first —
+  a swap could silently create a clash, or fail after the old pick was
+  already gone. Obvious alternative: build straight from that version.
+  Instead: clash-check the candidate against the owner's other picks
+  (excluding the one being replaced) *before* deleting or inserting
+  anything; on a clash, reject and leave the old pick untouched.
+  No commit exists yet — the fix lives only in this session's plan
+  discussion and reasoning, not in anything committed.
+  Tag: **pending** — missing: the picks API itself, plus a regression test
+  that swapping into a clashing session is rejected and leaves the original
+  pick untouched. Stage 2.
+
+- **Rejected the shared-timetable, two-page design.** The first shape
+  considered mirrored the starter's guestbook: one timetable shared by every
+  visitor, and a two-page split (grid + course-browse). Everyone opening the
+  crit URL at once would trample each other's picks, and reloading to see
+  state is the exact problem this app is meant to fix. Obvious alternative:
+  keep that shape, since it's what the starter already does. Instead:
+  per-browser `owner_id` cookie (independent timetable per visitor) and a
+  single page.
+  No commit exists yet — this was decided before any plan.md revision was
+  committed, so there's nothing in the repo to point at.
+  Tag: **pending** — missing: a test that two different cookies get
+  independent timetables (a pick under one `owner_id` is invisible to
+  another). Stage 2.
