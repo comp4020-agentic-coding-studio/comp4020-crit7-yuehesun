@@ -21,9 +21,9 @@ what the agent needs to carry from any of it is your call.
   Watch for a real fork during the work: a point where the obvious
   approach — to the build, or to how we work together — carried a mistake
   or risk, and we did something else instead for a reason. Log it in
-  `process-notes.md` and tell me — the rule in
-  `CLAUDE.md`, check in `spec/`, or deletion it deserves doesn't have to
-  exist yet, but say exactly what's missing and which stage adds it.
+  `process-notes.md` and tell me. Say what backs it (a rule in `CLAUDE.md`,
+  a check in `spec/`, or a committed deletion). If that isn't committed
+  yet, mark it pending: say exactly what is missing and which stage adds it.
 - Don't log chat-only corrections, renames, tool workarounds, progress
   notes, or mechanical cleanup with no real alternative considered.
 - For each entry, record: what happened, the obvious alternative, what we
@@ -32,7 +32,8 @@ what the agent needs to carry from any of it is your call.
   committed yet. Never invent a hash.
 - Before shipping: remind me to write `PROCESS.md` — pick only the most
   important moment from `process-notes.md` and write it up as a coherent,
-  clearly reasoned narrative of the whole build, brief to harness. A crit
-  week needs 150–300 words; an assignment needs 400–600.
+  clearly reasoned narrative of the whole build, from the assignment brief
+  to the harness we built. A crit week needs 150–300 words; an assignment
+  needs 400–600.
 - Also remind me to write `reflections/` from the whole `process-notes.md`,
   kept moments or not.
