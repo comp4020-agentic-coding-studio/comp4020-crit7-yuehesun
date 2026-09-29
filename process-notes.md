@@ -141,7 +141,7 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   `activities` (enum: lecture/tutorial/lab/assessment) so the renderer could
   branch on real data. Instead: a display-only heuristic in
   `src/lib/fragments.ts` (`isLecture` — a `code.startsWith("Lec")` check,
-  later extracted to its own module: [[lecture-permissive-overlap]])
+  later extracted to its own module, `src/lib/activity-kind.ts`)
   distinguishing non-lecture blocks visually, no schema change. (The visual
   treatment itself was revised once, from a diagonal stripe to a left-edge
   `box-shadow` bar, in `4c26f6f` — the stripe's white overlay lightened the
@@ -159,37 +159,54 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   failing red.
   Commit: [`d146d4d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/d146d4d) (`src/lib/fragments.ts`, `src/styles.css`); visual revision in [`4c26f6f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/4c26f6f) (`src/styles.css`).
 
-- **Made lecture overlaps allowed instead of always a clash.** <a id="lecture-permissive-overlap"></a>
-  Every overlap so far had been rejected outright: `addOrSwapPick` treated
-  any two time-overlapping picks as a clash regardless of activity kind.
-  ANU lectures aren't attendance- or mark-checked, so a visitor can
-  reasonably "attend" two lectures at once, or a lecture alongside a
-  tutorial — only two non-lecture activities (tutorial/lab/assessment)
-  genuinely competing for the same slot is a real clash. Obvious
-  alternative: keep the simple any-overlap-is-a-clash rule, since it's what
-  was already built and tested. Instead: `isDisallowedClash` narrows a clash
-  to "both sides non-lecture"; a lecture may overlap anything, and the grid
-  renders the overlap as a side-by-side split (`computeSlices`) rather than
-  picking one side to reject.
-  Reason: user-approved design change, with three explicit conditions —
-  the preview must split for any allowed overlap (not only a lecture
-  candidate), the seed/tests had to be updated for the new rule (forced
-  clashes non-lecture/non-lecture, a new forced-overlap fixture, the
-  clash-free baseline re-verified under the new rule), and the slice layout
-  had to be one shared pure function imported by both the server render and
-  the client preview — never two implementations that could drift.
+- **Found the clash rule didn't match a real timetable, while chasing a
+  display bug.** Manually testing the clash-dialog flow in small steps —
+  our habit of checking behaviour by hand as each piece landed, not just
+  running `pnpm check` — found the clash-warning border on an existing grid
+  pick never cleared once the dialog closed. That was a real, separate bug
+  (`applyClash()` kept tracking the DOM node it had just detached via
+  `replaceWith()`, which is a silent no-op on a parentless node), fixed on
+  its own in `d146d4d`. But watching that flow closely enough, repeatedly,
+  to diagnose *why* the border stuck made a second, deeper problem visible:
+  the clash being demonstrated to test the fix was a lecture overlapping a
+  tutorial — and treating that as a clash at all doesn't match how ANU
+  timetables actually work, since lectures aren't attendance- or
+  mark-checked and nothing stops a real student "attending" two sessions at
+  once. Obvious alternative: the display bug was already fixed in
+  `d146d4d`; stop there and leave the underlying "any time overlap is a
+  clash" rule exactly as already built and tested — it wasn't broken by any
+  test in the suite. Instead: proposed narrowing the rule itself (a clash
+  only when *both* sides are non-lecture) rather than leaving a technically-
+  working rule that models the wrong thing, and got it approved with three
+  conditions — the hover preview must split on every allowed overlap (not
+  only when the candidate itself is a lecture), the seed data and its tests
+  needed updating for the new rule, and the slice layout had to be one
+  shared pure function imported by both the server render and the client
+  preview, never two implementations that could drift.
+  Reason: fixing only the border-revert bug would have left the app
+  correctly *displaying* a clash between a lecture and a tutorial that a
+  real ANU timetable would never treat as a conflict — testing by hand in
+  small, closely-watched steps throughout the build, rather than saving
+  manual verification for one pass at the end, is what surfaced that
+  mismatch while it was still cheap: one contained change (a new pure
+  module, a seed fixture, one function in `db.ts`, two renderers) instead of
+  a late-discovered rearchitecture found during final polish or after
+  marking.
   Evidence: `spec/overlap.test.ts` (the shared `computeSlices`/
-  `isDisallowedClash` module, unit-tested in isolation) and
-  `spec/timetable.test.ts`'s `"allows a lecture and a non-lecture activity
-  to overlap"` test, both green; `spec/seed.test.ts` re-asserts every forced
-  clash is non-lecture/non-lecture and every forced overlap includes a
-  lecture. Missing: no automated browser check of the hover-preview split
+  `isDisallowedClash` module, unit-tested standalone); `spec/timetable.test.ts`'s
+  `"allows a lecture and a non-lecture activity to overlap"` test;
+  `spec/seed.test.ts` re-asserting every forced clash is non-lecture/
+  non-lecture and every forced overlap includes a lecture — all green.
+  Missing: no automated browser check of the hover-preview split itself
   (`src/scripts/timetable-client.ts`) — this repo has no browser-automation
   tooling, so that path was verified by typecheck/reasoning, not by
   observing it render, and is flagged to the user as such.
-  Commit: [`15da208`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/15da208) (shared `isLecture`/`kindClass`),
-  [`3f8382c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/3f8382c) (shared `overlap.ts` + tests),
-  [`1246c98`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/1246c98) (seed fixture + seed tests),
-  [`9bba39b`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/9bba39b) (the rule change + HTTP test),
-  [`db4be08`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/db4be08) (server-side slice rendering),
-  [`83a575f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/83a575f) (client-side preview splitting).
+  Commit: [`d146d4d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/d146d4d)
+  (the display-bug fix that prompted the closer look);
+  [`15da208`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/15da208),
+  [`3f8382c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/3f8382c),
+  [`1246c98`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/1246c98),
+  [`9bba39b`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/9bba39b),
+  [`db4be08`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/db4be08),
+  [`83a575f`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/83a575f)
+  (the rule change itself, built across these small commits).
