@@ -12,11 +12,13 @@ const preview = document.getElementById("grid-preview") as HTMLElement | null;
 
 function showPreview(li: HTMLElement) {
   if (!preview) return;
-  const { day, row, span, color, label } = li.dataset;
+  const { day, row, span, color, kind, label } = li.dataset;
   if (!day || !row || !span || !color) return;
   preview.style.gridColumn = String(Number(day) + 2);
   preview.style.gridRow = `${row} / span ${span}`;
-  preview.style.background = color;
+  preview.style.backgroundColor = color;
+  preview.classList.remove("kind-lecture", "kind-other");
+  if (kind) preview.classList.add(kind);
   preview.textContent = label ?? "";
   preview.hidden = false;
 }
@@ -54,6 +56,11 @@ document.addEventListener(
   },
   { passive: true },
 );
+// touchstart has no automatic "leave" counterpart the way mouseover/focusin
+// get mouseout/focusout — without this, a touch-shown ghost never clears on
+// a device that only ever sends touch events.
+document.addEventListener("touchend", hidePreview, { passive: true });
+document.addEventListener("touchcancel", hidePreview, { passive: true });
 
 function findGridPick(activityId: string | number): HTMLElement | null {
   return grid ? grid.querySelector(`.grid-pick[data-activity-id="${activityId}"]`) : null;
@@ -66,6 +73,11 @@ function firstElement(html: string): HTMLElement | null {
 }
 
 function applySuccess(data: { activityId: number; gridPickHtml: string | null; panelHtml: string | null }) {
+  // A touch-shown preview has no touchend/touchcancel-driven mouseout
+  // equivalent (see the touchstart handler below), so a ghost left over from
+  // the session the visitor just committed can otherwise survive the panel
+  // swap that follows.
+  hidePreview();
   const old = findGridPick(data.activityId);
   if (old) old.remove();
   const replacement = data.gridPickHtml ? firstElement(data.gridPickHtml) : null;
@@ -113,13 +125,20 @@ function ensureDialog(): HTMLDialogElement {
 function applyClash(data: { clashWithActivityId: number; clashWithGridPickHtml: string | null; dialogHtml: string }) {
   const existing = findGridPick(data.clashWithActivityId);
   if (existing && data.clashWithGridPickHtml) {
-    clashRestoreEl = existing;
     clashRestoreHtml = existing.outerHTML;
     const replacement = firstElement(data.clashWithGridPickHtml);
-    if (replacement) existing.replaceWith(replacement);
+    if (replacement) {
+      existing.replaceWith(replacement);
+      // Track the node actually left in the DOM, not the one we just
+      // detached — replaceWith() on a parentless node is a silent no-op, so
+      // restoring from the old reference would never put anything back.
+      clashRestoreEl = replacement;
+    }
   }
+  hidePreview();
   const dialog = ensureDialog();
   dialog.innerHTML = data.dialogHtml;
+  if (dialog.open) dialog.close();
   dialog.showModal();
 }
 

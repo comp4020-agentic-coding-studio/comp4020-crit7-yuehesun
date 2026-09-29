@@ -79,6 +79,11 @@ a {
   border-radius: 0.375rem;
   text-decoration: none;
   color: inherit;
+  /* Disables the browser's double-tap-to-zoom gesture on this tap target
+     specifically (pinch-zoom elsewhere on the page is untouched) — a closely
+     packed list of small tap targets is exactly where an accidental
+     near-simultaneous double tap reads as "the page zoomed in". */
+  touch-action: manipulation;
 }
 
 .course-link[aria-current="page"] {
@@ -221,6 +226,21 @@ a {
   outline-offset: -2px;
 }
 
+/* Lecture vs everything else (tutorial/lab/assessment), same course colour:
+   a solid fill alone made every activity in a course look identical at a
+   glance. Lectures stay a plain fill; anything else gets a diagonal stripe
+   on top, so the two are distinguishable without relying on reading the
+   activity-code text or on colour alone. */
+.grid-pick.kind-other {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.55) 0,
+    rgba(255, 255, 255, 0.55) 4px,
+    transparent 4px,
+    transparent 9px
+  );
+}
+
 /* Preview highlight (plan.md §8): hover/focus/touchstart on any session row
    ghosts its slot on the grid — translucent fill, raised border/shadow — so
    a visitor can see where an alternative would land before committing. */
@@ -243,6 +263,7 @@ a {
 
 .session-list li[data-day] {
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .session-list li[data-day]:hover,

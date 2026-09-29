@@ -15,12 +15,30 @@ function rowSpan(startHour: number, startMinutes: number, endMinutes: number): {
   return { row: 2 + (startMinutes - startHour * 60) / 30, span: (endMinutes - startMinutes) / 30 };
 }
 
+// `activities.code` is deliberately free text, not an enum (schema.ts) —
+// real course structures vary too much for a fixed set of kinds. This is a
+// display-only heuristic on top of that free text, not a new source of
+// truth: every seeded activity code follows the "Lec*" convention for
+// lectures, so a prefix check is enough to tell lectures apart from
+// everything else (tutorials, labs, assessments) without a schema change.
+function isLecture(activityCode: string): boolean {
+  return activityCode.startsWith("Lec");
+}
+
+function kindClass(activityCode: string): string {
+  return isLecture(activityCode) ? "kind-lecture" : "kind-other";
+}
+
 export function renderGridPick(pick: PickWithDetails, startHour: number, clash: boolean): string {
   const { row, span } = rowSpan(startHour, pick.startMinutes, pick.endMinutes);
   const warn = clash ? '<span aria-hidden="true">⚠ </span>' : "";
+  const classes = ["grid-pick", kindClass(pick.activityCode), clash ? "clash" : ""].filter(Boolean).join(" ");
   return (
-    `<a class="grid-pick${clash ? " clash" : ""}" href="/?course=${pick.courseId}" data-activity-id="${pick.activityId}" ` +
-    `style="grid-column: ${pick.day + 2}; grid-row: ${row} / span ${span}; background: ${pick.courseColor}">` +
+    `<a class="${classes}" href="/?course=${pick.courseId}" data-activity-id="${pick.activityId}" ` +
+    // background-color (not the "background" shorthand) so the kind-based
+    // stripe pattern below, set via background-image in styles.css, doesn't
+    // get reset to none by this inline style.
+    `style="grid-column: ${pick.day + 2}; grid-row: ${row} / span ${span}; background-color: ${pick.courseColor}">` +
     `${warn}${escapeHtml(pick.courseCode)} · ${escapeHtml(pick.activityCode)}</a>`
   );
 }
@@ -50,7 +68,7 @@ export function renderActivityPanel(
         : `<form method="POST" action="/api/picks"><input type="hidden" name="sessionId" value="${session.id}" /><input type="hidden" name="courseId" value="${courseId}" /><button type="submit">Add</button></form>`;
       return (
         `<li${picked ? ' class="picked"' : ""} data-day="${session.day}" data-row="${row}" data-span="${span}" ` +
-        `data-color="${courseColor}" data-label="${label}" tabindex="0">` +
+        `data-color="${courseColor}" data-kind="${kindClass(activity.code)}" data-label="${label}" tabindex="0">` +
         `<span>${timeText}</span>${action}</li>`
       );
     })
