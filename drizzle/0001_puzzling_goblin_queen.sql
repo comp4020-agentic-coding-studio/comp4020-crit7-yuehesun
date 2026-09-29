@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `activities_course_lecture_code_unique` ON `activities` (`course_id`,`code`) WHERE "activities"."code" like 'Lec%';

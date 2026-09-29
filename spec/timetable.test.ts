@@ -255,7 +255,7 @@ describe("database constraints (isolated fixture, no HTTP)", () => {
       .returning({ id: sessions.id })
       .get();
 
-    return { db, activityAId: activityA.id, activityBId: activityB.id, sessionAId: sessionA.id };
+    return { db, courseId: course.id, activityAId: activityA.id, activityBId: activityB.id, sessionAId: sessionA.id };
   }
 
   it("refuses a duplicate (owner_id, activity_id) pick", () => {
@@ -271,5 +271,27 @@ describe("database constraints (isolated fixture, no HTTP)", () => {
     expect(() =>
       db.insert(picks).values({ ownerId: "o1", sessionId: sessionAId, activityId: activityBId }).run(),
     ).toThrow();
+  });
+
+  it("refuses a second lecture-code activity in the same course", () => {
+    // schema.ts's activities_course_lecture_code_unique: a course can have at
+    // most one activity per "Lec*" code (LecA, LecB, ...) — the bug this
+    // guards against is two separately-inserted "LecA" rows for one course,
+    // not two sessions on one activity coinciding in time (which is fine).
+    const { db, courseId } = freshFixture();
+    db.insert(activities).values({ courseId, code: "LecA" }).run();
+    expect(() => db.insert(activities).values({ courseId, code: "LecA" }).run()).toThrow();
+  });
+
+  it("allows the same lecture code in a different course, and repeated non-lecture codes in the same course", () => {
+    const { db, courseId } = freshFixture();
+    db.insert(activities).values({ courseId, code: "LecA" }).run();
+
+    const otherCourse = db.insert(courses).values({ code: "Y", title: "Y", color: "#fff" }).returning({ id: courses.id }).get();
+    expect(() => db.insert(activities).values({ courseId: otherCourse.id, code: "LecA" }).run()).not.toThrow();
+
+    // "A"/"B" in freshFixture() are already non-lecture codes in courseId —
+    // a third non-lecture row with the same code is unrestricted.
+    expect(() => db.insert(activities).values({ courseId, code: "A" }).run()).not.toThrow();
   });
 });

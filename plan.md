@@ -50,6 +50,17 @@ Clicking a course shows its available slots as a list on the right side of the p
   ✗→✓ live flip on Add all correct against
   https://comp4020-crit7-yuehesun.fly.dev/). See §12's Stage 3 for the
   breakdown.
+- Post-Stage-3 data-integrity fix (2026-09-30): a partial unique index,
+  `activities_course_lecture_code_unique` (`src/lib/schema.ts`), stops a
+  course ever getting two activity rows with the same lecture code (LecA,
+  LecB, ...) — scoped to `code LIKE 'Lec%'` only, via `isLecture`'s existing
+  convention, so non-lecture codes (TutA, ComA, ...) are unrestricted.
+  Migration `drizzle/0001_puzzling_goblin_queen.sql`; guarded by two new
+  tests in `spec/timetable.test.ts`'s "database constraints" block. Not yet
+  deployed to Fly. (Seed data itself was never wrong here — SLOP4225's LecA
+  is one activity with two *sessions* that happen to coincide in time, not
+  two LecA activity rows; this constraint guards against the latter, which
+  is a real but so-far-unhit bug shape.)
 - Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
 
 

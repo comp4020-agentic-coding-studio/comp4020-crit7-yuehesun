@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { foreignKey, int, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { foreignKey, int, sqliteTable, text, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // The schema is the ground truth for the database. To change it: edit here,
 // run `pnpm db:generate` to turn the diff into a migration under drizzle/,
@@ -18,13 +18,30 @@ export const courses = sqliteTable("courses", {
 // `code` is free text ("LecA", "TutA", "ComA", "Asm", ...), not an enum: real
 // course structures vary too much for a fixed set of activity kinds — see
 // plan.md §2.
-export const activities = sqliteTable("activities", {
-  id: int().primaryKey({ autoIncrement: true }),
-  courseId: int("course_id")
-    .notNull()
-    .references(() => courses.id),
-  code: text().notNull(),
-});
+export const activities = sqliteTable(
+  "activities",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    courseId: int("course_id")
+      .notNull()
+      .references(() => courses.id),
+    code: text().notNull(),
+  },
+  (table) => [
+    // A course may have at most one activity of each lecture code ("LecA",
+    // "LecB", ...) — the "Lec" prefix convention shared with
+    // src/lib/activity-kind.ts's isLecture. Scoped to that prefix only (a
+    // partial index): non-lecture kinds (TutA, ComA, ...) aren't restricted
+    // this way, since nothing about them implies "one stream per code".
+    // The literal is written straight into the SQL template rather than
+    // passed through like() (which drizzle-kit compiles to a bound `?`
+    // placeholder — meaningless in a standalone CREATE INDEX migration
+    // statement, and fails at migrate time with no value ever bound).
+    uniqueIndex("activities_course_lecture_code_unique")
+      .on(table.courseId, table.code)
+      .where(sql`${table.code} like 'Lec%'`),
+  ],
+);
 
 export const sessions = sqliteTable(
   "sessions",
