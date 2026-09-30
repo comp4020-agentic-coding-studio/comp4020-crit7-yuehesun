@@ -6,6 +6,23 @@
 
 What this is, in a paragraph: the thing, and what it's for.
 
+## Data model
+
+Four tables (`src/lib/schema.ts`):
+
+- **`courses`** — `id`, `code` (unique, e.g. `SLOP4225`), `title`, `color`
+  (hex, one per course).
+- **`activities`** — `id`, `course_id` (→ `courses`), `code` (free text —
+  `LecA`, `TutA`, `ComA`, ...; a course may have at most one activity per
+  lecture code).
+- **`sessions`** — `id`, `activity_id` (→ `activities`), `activity_code`
+  (denormalised copy of the parent activity's code), `day` (0=Mon..4=Fri),
+  `start_minutes`/`end_minutes` (multiples of 30), `location`; a lecture
+  activity may have only one session.
+- **`picks`** — `id`, `owner_id` (the anonymous per-browser cookie),
+  `session_id`, `activity_id` (denormalised), `created_at`; one session per
+  activity per owner, enforced by a database constraint, not just app logic.
+
 ## What good looks like here
 
 **Data.** This app never seeds real ANU data or personal information: the repo
