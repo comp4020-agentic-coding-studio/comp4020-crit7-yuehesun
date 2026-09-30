@@ -7,6 +7,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { describe, expect, inject, it } from "vitest";
 import { activities, courses, picks, sessions } from "../src/lib/schema";
 import { DAY_LABELS, formatMinutes } from "../src/lib/format";
+import { nicknameFor } from "../src/lib/nickname";
 import { generateSeed, type GeneratedSession } from "../src/lib/seed";
 
 // Drives the RUNNING built server (spec/global-setup.ts) over real HTTP,
@@ -45,6 +46,9 @@ function findSession(courseCode: string, activityCode: string, baseline: boolean
 
 interface Jar {
   fetch(path: string, init?: RequestInit): Promise<Response>;
+  // The raw "owner_id=<uuid>" cookie header captured so far — lets a test
+  // assert the page never leaks this value back into its own HTML.
+  rawCookie(): string;
 }
 
 // A minimal per-owner cookie jar: captures the owner_id Set-Cookie from the
@@ -65,6 +69,9 @@ function makeJar(): Jar {
       const setCookie = res.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";")[0];
       return res;
+    },
+    rawCookie() {
+      return cookie;
     },
   };
 }
@@ -112,6 +119,18 @@ describe("timetable: add/swap/remove over HTTP", () => {
     expect((await addPick(jar, session, "SLOP4225")).status).toBe(303);
     expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), session)).toBe(true);
     expect(isPicked(await pageHtml(jar, "SLOP4225", "LecA"), session)).toBe(true);
+  });
+
+  it("never renders the raw owner_id cookie value into the page", async () => {
+    const jar = makeJar();
+    const html = await pageHtml(jar, "SLOP4225", "LecA");
+
+    const rawCookie = jar.rawCookie();
+    expect(rawCookie).toMatch(/^owner_id=/);
+    const ownerId = rawCookie.slice("owner_id=".length);
+
+    expect(html).not.toContain(ownerId);
+    expect(html).toContain(nicknameFor(ownerId));
   });
 
   it("isolates picks between two owners", async () => {

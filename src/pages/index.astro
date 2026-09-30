@@ -10,6 +10,7 @@ import {
 } from "../lib/db";
 import { renderActivityPanel, renderClashDialogInner, renderGridPick } from "../lib/fragments";
 import { DAY_LABELS } from "../lib/format";
+import { nicknameFor } from "../lib/nickname";
 
 // Stage 2a: the real 3-region shell, server-rendered from the seeded data —
 // course list (left), week grid (main), session panel (right). Course
@@ -18,6 +19,7 @@ import { DAY_LABELS } from "../lib/format";
 // 2c adds the JS partial-update/preview layer (bottom `<script>`), reusing
 // the exact same fragment renderers as the API's JSON responses (plan §5).
 const ownerId = Astro.locals.ownerId;
+const nickname = nicknameFor(ownerId);
 
 const courses = listCourses();
 const requestedCourseId = Number(Astro.url.searchParams.get("course"));
@@ -64,6 +66,7 @@ const gridTemplateRows = `auto repeat(${halfHourSlots}, 1.75rem)`;
       <a href="/readme/">About</a>
     </nav>
     <main>
+      <p class="user-greeting">Hello, {nickname}</p>
       <h1>My Timetable</h1>
 
       <div class="layout">
