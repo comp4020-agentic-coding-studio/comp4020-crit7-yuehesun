@@ -75,8 +75,29 @@ Clicking a course shows its available slots as a list on the right side of the p
   drizzle wraps the whole migration run in one transaction, which makes
   `PRAGMA foreign_keys=OFF` a no-op per SQLite's documented behaviour, so
   FK enforcement stays live throughout). Guarded by new tests in both
-  `spec/seed.test.ts` and `spec/timetable.test.ts`. Not yet deployed to Fly.
-- Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney).
+  `spec/seed.test.ts` and `spec/timetable.test.ts`. Deployed to Fly
+  (2026-09-30): the live volume's pre-fix data (SLOP4225's LecA really did
+  have two sessions, seeded before this fix existed) hit exactly the
+  failure mode this migration is meant to prevent — boot-time `migrate()`
+  threw `UNIQUE constraint failed` on `sessions_lecture_activity_unique`
+  and the app 500'd. Reproduced locally first (a throwaway repro script,
+  not committed, migrating a copy of the old pre-migration schema seeded
+  with a deliberately duplicated lecture session) to confirm the cause
+  before touching production. Fix: clear the volume's `app.db`/`-wal`/`-shm`
+  (`flyctl ssh console`) and let boot-time `migrate()`+`seedIfEmpty()`
+  repopulate it from scratch — same reseed pattern Stage 3c used, this time
+  load-bearing rather than cosmetic. Re-verified live: 200, all 4 courses,
+  nickname line present, raw `owner_id` cookie absent from the HTML.
+- Nickname line (2026-09-30): "Hello, Guest-XXXX" at the top of the page,
+  derived server-side from `owner_id` via a truncated SHA-256
+  (`src/lib/nickname.ts`) — deterministic per browser, never exposes the
+  raw `httpOnly` cookie. `spec/timetable.test.ts` asserts the raw owner_id
+  never appears in the rendered page.
+- `PROCESS.md`, `process-notes.md`, and `reflections/crit-7.md` are done —
+  the three chosen moments (clash-rule correction, the `CLAUDE.md` workflow
+  addition, the lecture constraint) woven into one narrative with verified
+  commit hashes; the reflection cites two of them for its two prompts.
+- Deadline: Wed 30 Sep 2026, 12:00 (Australia/Sydney). Shipped.
 
 
 ## 1. The slice
