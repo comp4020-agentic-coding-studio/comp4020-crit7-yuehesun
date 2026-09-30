@@ -75,9 +75,8 @@ from `git log`/`git show`, or `pending: Stage N` if nothing's committed yet.
   whether the app actually works.
   Evidence: `git log --oneline -- .github/workflows/checks.yml` is empty
   (untouched since the initial commit) while `git log --diff-filter=D`
-  confirms `src/pages/api/events.ts` was deleted in `438123e`. Missing: the
-  fix itself and a deploy that shows the pipeline green without it.
-  Commit: pending: Stage 2d.
+  confirms `src/pages/api/events.ts` was deleted in `438123e`.
+  Commit: [`55a26bd`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-yuehesun/commit/55a26bd) (`.github/workflows/checks.yml`).
 
 - **Rejected the shared-timetable, two-page design.** The first shape
   considered mirrored the starter's guestbook: one timetable shared by every
